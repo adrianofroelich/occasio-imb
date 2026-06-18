@@ -18,7 +18,7 @@ export default function Home() {
               <div className="space-y-4">
                 <div className="flex justify-center">
                   <Badge className="bg-occasio-blue/30 border border-occasio-blue/60 text-white hover:bg-occasio-blue/40 px-5 py-2.5 text-sm md:text-base rounded-full font-semibold tracking-wide transition-all duration-300">
-                    Revolucionando a Manutenção Predial
+                    Revolucionando a Manutenção Imobiliária
                   </Badge>
                 </div>
                 <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl xl:text-6xl/none">
