@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { comprimirImagem } from "@/lib/compressor"
+import VisualizadorImagem from "@/components/VisualizadorImagem"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -77,6 +78,29 @@ export default function InquilinoDashboard() {
   
   // Referência do input de arquivo
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Estados para galeria de mídias e zoom de imagens
+  const [midias, setMidias] = useState<{ id: string; url_storage: string; tipo_midia: string }[]>([])
+  const [urlImagemZoom, setUrlImagemZoom] = useState<string | null>(null)
+
+  // Sincroniza mídias do chamado ativo do inquilino
+  useEffect(() => {
+    if (chamadoAtivo) {
+      supabase
+        .from("chamados_midias")
+        .select("*")
+        .eq("chamado_id", chamadoAtivo.id)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error("Erro ao buscar mídias:", error)
+          } else {
+            setMidias(data || [])
+          }
+        })
+    } else {
+      setMidias([])
+    }
+  }, [chamadoAtivo])
 
   // Função para carregar os dados do inquilino (imóvel e chamado)
   const loadInquilinoData = async (silencioso = false) => {
@@ -386,6 +410,31 @@ export default function InquilinoDashboard() {
                   </span>
                 </div>
               </div>
+
+              {/* Galeria de Fotos com Zoom */}
+              {midias.length > 0 && (
+                <div className="pt-4 border-t border-slate-100 mt-2">
+                  <strong className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Fotos Anexadas</strong>
+                  <div className="grid grid-cols-2 gap-2">
+                    {midias.map((midia) => (
+                      <div 
+                        key={midia.id} 
+                        onClick={() => setUrlImagemZoom(midia.url_storage)}
+                        className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                      >
+                        <img 
+                          src={midia.url_storage} 
+                          alt={`Foto do chamado - ${midia.tipo_midia}`}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-black/60 text-[9px] text-white py-0.5 px-1 font-semibold text-center capitalize">
+                          Foto: {midia.tipo_midia}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -591,6 +640,14 @@ export default function InquilinoDashboard() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Modal de Zoom Avançado para Vistoria */}
+      {urlImagemZoom && (
+        <VisualizadorImagem 
+          src={urlImagemZoom} 
+          onClose={() => setUrlImagemZoom(null)} 
+        />
       )}
       
     </div>

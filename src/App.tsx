@@ -8,6 +8,7 @@ import LoginTeste from "./pages/LoginTeste"
 import Imoveis from "./pages/imobiliaria/Imoveis"
 import Dashboard from "./pages/imobiliaria/Dashboard"
 import InquilinoDashboard from "./pages/inquilino/Dashboard"
+import PrestadorDashboard from "./pages/prestador/Dashboard"
 
 // Componente auxiliar para tratar rolagem suave de âncoras (hash)
 // e garantir que a página role para o topo ao alternar de rota
@@ -103,6 +104,16 @@ function MainLayout() {
                 Meu Chamado
               </Link>
             )}
+
+            {/* Links exclusivos para Prestador ou Super Admin */}
+            {(perfil?.perfil === "prestador" || perfil?.perfil === "super_admin") && (
+              <Link 
+                to="/prestador/dashboard" 
+                className={`${location.pathname === "/prestador/dashboard" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+              >
+                Painel Prestador
+              </Link>
+            )}
             
             {isHome ? (
               <a href="#features" className="hover:text-occasio-blue transition-colors">Como Funciona</a>
@@ -158,6 +169,7 @@ function MainLayout() {
           <Route path="/imobiliaria/imoveis" element={<Imoveis />} />
           <Route path="/imobiliaria/dashboard" element={<Dashboard />} />
           <Route path="/inquilino/dashboard" element={<InquilinoDashboard />} />
+          <Route path="/prestador/dashboard" element={<PrestadorDashboard />} />
         </Routes>
       </main>
 

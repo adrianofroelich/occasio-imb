@@ -70,7 +70,8 @@ occasio-imb/
 ├── src/
 │   ├── assets/             # Imagens e vetores secundários do app
 │   ├── components/
-│   │   └── ui/             # Componentes primitivos do Shadcn UI (Badge, Button, Card, Input)
+│   │   ├── ui/             # Componentes primitivos do Shadcn UI (Badge, Button, Card, Input)
+│   │   └── VisualizadorImagem.tsx # Modal de visualização de vistorias com Zoom interativo (Fase 5)
 │   ├── hooks/
 │   │   └── useAuth.tsx     # Contexto e hook de autenticação e sessão com perfil integrado
 │   ├── lib/
@@ -83,6 +84,8 @@ occasio-imb/
 │   │   │   └── Imoveis.tsx   # Cadastro e listagem de imóveis (Fase 3)
 │   │   ├── inquilino/
 │   │   │   └── Dashboard.tsx # Painel realtime e abertura de chamado do inquilino (Fase 4)
+│   │   ├── prestador/
+│   │   │   └── Dashboard.tsx # Painel mobile-first de propostas e OS ativas do técnico (Fase 5)
 │   │   ├── Beneficios.tsx  # Página detalhada de ROI e Gestão Patrimonial
 │   │   ├── Home.tsx        # Landing Page institucional da plataforma
 │   │   └── LoginTeste.tsx  # Simulador de autenticação para testes rápidos RLS

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
+import VisualizadorImagem from "@/components/VisualizadorImagem"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -80,6 +81,29 @@ export default function Dashboard() {
   const [novaResponsabilidade, setNovaResponsabilidade] = useState<Responsabilidade | "">("")
   const [observacaoHistorico, setObservacaoHistorico] = useState("")
   const [salvandoAcao, setSalvandoAcao] = useState(false)
+
+  // Estados para galeria de mídias e zoom de imagem
+  const [midias, setMidias] = useState<{ id: string; url_storage: string; tipo_midia: string }[]>([])
+  const [urlImagemZoom, setUrlImagemZoom] = useState<string | null>(null)
+
+  // Sincroniza mídias sempre que o chamado ativo mudar
+  useEffect(() => {
+    if (chamadoAtivo) {
+      supabase
+        .from("chamados_midias")
+        .select("*")
+        .eq("chamado_id", chamadoAtivo.id)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error("Erro ao buscar mídias do chamado:", error)
+          } else {
+            setMidias(data || [])
+          }
+        })
+    } else {
+      setMidias([])
+    }
+  }, [chamadoAtivo])
 
   // Função para buscar os chamados no banco de dados
   const loadChamados = async (silencioso = false) => {
@@ -499,6 +523,33 @@ export default function Dashboard() {
                     {salvandoAcao ? "Salvando..." : "Salvar e Atualizar Chamado"}
                   </Button>
                 </form>
+
+                {/* Exibição de Fotos Vistoria Técnica com Zoom */}
+                {midias.length > 0 && (
+                  <div className="pt-4 border-t border-slate-100 mt-4">
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                      Fotos de Vistoria
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {midias.map((midia) => (
+                        <div 
+                          key={midia.id} 
+                          onClick={() => setUrlImagemZoom(midia.url_storage)}
+                          className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                        >
+                          <img 
+                            src={midia.url_storage} 
+                            alt={`Foto ${midia.tipo_midia}`}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 bg-black/60 text-[9px] text-white py-0.5 px-1 font-semibold text-center capitalize">
+                            {midia.tipo_midia}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -515,6 +566,14 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      {/* Modal de Inspeção com Zoom Reativo */}
+      {urlImagemZoom && (
+        <VisualizadorImagem 
+          src={urlImagemZoom} 
+          onClose={() => setUrlImagemZoom(null)} 
+        />
+      )}
     </div>
   )
 }
