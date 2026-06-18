@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
-  Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, DollarSign, Hammer, AlertCircle
+  Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, Hammer, AlertCircle
 } from "lucide-react"
 
 // Tipagens locais
@@ -37,6 +37,24 @@ interface Chamado {
   }
 }
 
+// Funções auxiliares para formatação de moeda brasileira (pt-BR)
+function formatarMoedaInput(valorStr: string): string {
+  const apenasDigitos = valorStr.replace(/\D/g, "")
+  if (!apenasDigitos) return ""
+  const centavos = parseInt(apenasDigitos, 10)
+  const valorDecimal = centavos / 100
+  return valorDecimal.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
+function desformatarMoeda(valorStr: string): number {
+  if (!valorStr) return 0
+  const limpo = valorStr.replace(/\./g, "").replace(",", ".")
+  return parseFloat(limpo) || 0
+}
+
 export default function PrestadorDashboard() {
   const { user, perfil } = useAuth()
   
@@ -57,7 +75,7 @@ export default function PrestadorDashboard() {
   // Formulário de Cotação
   const [chamadoCotando, setChamadoCotando] = useState<Chamado | null>(null)
   const [valorServico, setValorServico] = useState("")
-  const [valorMateriais, setValorMateriais] = useState("0.00")
+  const [valorMateriais, setValorMateriais] = useState("")
   const [prazo, setPrazo] = useState("")
   const [observacoes, setObservacoes] = useState("")
 
@@ -162,7 +180,10 @@ export default function PrestadorDashboard() {
     setErro(null)
     setSucesso(null)
 
-    if (!valorServico || !prazo) {
+    const valServico = desformatarMoeda(valorServico)
+    const valMateriais = desformatarMoeda(valorMateriais)
+
+    if (valServico <= 0 || !prazo) {
       setErro("Preencha o valor de serviço e o prazo de execução.")
       setSalvando(false)
       return
@@ -175,8 +196,8 @@ export default function PrestadorDashboard() {
         .insert({
           chamado_id: chamadoCotando.id,
           prestador_id: user?.id,
-          valor_servico_r$: parseFloat(valorServico),
-          valor_materiais_r$: parseFloat(valorMateriais),
+          valor_servico_r$: valServico,
+          valor_materiais_r$: valMateriais,
           prazo_execucao_dias: parseInt(prazo),
           observacoes_tecnicas: observacoes
         })
@@ -197,13 +218,13 @@ export default function PrestadorDashboard() {
         usuario_id: user?.id,
         status_anterior: "aguardando_orcamento" as StatusChamado,
         novo_status: "orcamento_recebido" as StatusChamado,
-        observacao: `Orçamento técnico de R$ ${(parseFloat(valorServico) + parseFloat(valorMateriais)).toFixed(2)} enviado pelo prestador ${perfil?.nome}.`
+        observacao: `Orçamento técnico de R$ ${(valServico + valMateriais).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} enviado pelo prestador ${perfil?.nome}.`
       })
 
       setSucesso("Orçamento enviado com sucesso!")
       setChamadoCotando(null)
       setValorServico("")
-      setValorMateriais("0.00")
+      setValorMateriais("")
       setPrazo("")
       setObservacoes("")
 
@@ -469,40 +490,54 @@ export default function PrestadorDashboard() {
                   <div className="p-3 bg-slate-50 rounded border text-xs text-slate-600 mb-2">
                     <strong>Detalhes da ocorrência:</strong>
                     <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoCotando.descricao_problema}</p>
-                    <p className="mt-2 text-[10px]">Visitação técnica preferencial: <strong>{chamadoCotando.disponibilidade_atendimento}</strong></p>
+                    
+                    <div className="mt-3 bg-amber-50 border border-amber-200 rounded-md p-3 text-amber-900">
+                      <span className="block text-[10px] font-bold text-amber-800 uppercase tracking-wide mb-0.5">
+                        Horário de Visitação Preferencial:
+                      </span>
+                      <strong className="text-sm font-extrabold text-amber-950 block">
+                        {chamadoCotando.disponibilidade_atendimento}
+                      </strong>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        Mão de Obra (R$) *
+                        Mão de Obra *
                       </label>
                       <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold select-none">
+                          R$
+                        </span>
                         <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="0,00"
+                          className="pl-9 pr-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-occasio-blue"
                           value={valorServico}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValorServico(e.target.value)}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValorServico(formatarMoedaInput(e.target.value))}
                           required
                         />
-                        <DollarSign className="absolute right-2.5 top-2.5 h-4 w-4 text-slate-400" />
                       </div>
                     </div>
 
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        Materiais (R$)
+                        Materiais
                       </label>
                       <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold select-none">
+                          R$
+                        </span>
                         <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="0,00"
+                          className="pl-9 pr-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-occasio-blue"
                           value={valorMateriais}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValorMateriais(e.target.value)}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValorMateriais(formatarMoedaInput(e.target.value))}
                         />
-                        <DollarSign className="absolute right-2.5 top-2.5 h-4 w-4 text-slate-400" />
                       </div>
                     </div>
                   </div>
