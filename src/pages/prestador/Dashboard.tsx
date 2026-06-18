@@ -430,7 +430,7 @@ export default function PrestadorDashboard() {
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                            {chamado.imovel.codigo_imovel}
+                            {chamado.imovel?.codigo_imovel || "Sem Código"}
                           </span>
                           <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
                         </div>
@@ -441,7 +441,7 @@ export default function PrestadorDashboard() {
                       <p className="text-slate-500 line-clamp-2 leading-relaxed">{chamado.descricao_problema}</p>
                       
                       <div className="flex justify-between items-center text-[10px] text-slate-400 border-t border-slate-100 pt-2.5">
-                        <span>Endereço: <strong>{chamado.imovel.endereco}</strong></span>
+                        <span>Endereço: <strong>{chamado.imovel?.endereco || "Não disponível"}</strong></span>
                         <Button 
                           onClick={() => setChamadoCotando(chamado)} 
                           size="sm" 
@@ -564,7 +564,7 @@ export default function PrestadorDashboard() {
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                            {chamado.imovel.codigo_imovel}
+                            {chamado.imovel?.codigo_imovel || "Sem Código"}
                           </span>
                           <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
                         </div>
@@ -578,8 +578,8 @@ export default function PrestadorDashboard() {
                       </div>
                       
                       <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600">
-                        <strong>Endereço:</strong> {chamado.imovel.endereco} ({chamado.imovel.bairro})<br/>
-                        <strong>Inquilino:</strong> {chamado.inquilino.nome}
+                        <strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})<br/>
+                        <strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}
                       </div>
 
                       <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
