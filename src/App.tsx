@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "./hooks/useAuth"
 import LoginTeste from "./pages/LoginTeste"
 import Imoveis from "./pages/imobiliaria/Imoveis"
 import Dashboard from "./pages/imobiliaria/Dashboard"
+import InquilinoDashboard from "./pages/inquilino/Dashboard"
 
 // Componente auxiliar para tratar rolagem suave de âncoras (hash)
 // e garantir que a página role para o topo ao alternar de rota
@@ -92,6 +93,16 @@ function MainLayout() {
                 </Link>
               </>
             )}
+
+            {/* Links exclusivos para Inquilino ou Super Admin */}
+            {(perfil?.perfil === "inquilino" || perfil?.perfil === "super_admin") && (
+              <Link 
+                to="/inquilino/dashboard" 
+                className={`${location.pathname === "/inquilino/dashboard" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+              >
+                Meu Chamado
+              </Link>
+            )}
             
             {isHome ? (
               <a href="#features" className="hover:text-occasio-blue transition-colors">Como Funciona</a>
@@ -146,6 +157,7 @@ function MainLayout() {
           <Route path="/login-teste" element={<LoginTeste />} />
           <Route path="/imobiliaria/imoveis" element={<Imoveis />} />
           <Route path="/imobiliaria/dashboard" element={<Dashboard />} />
+          <Route path="/inquilino/dashboard" element={<InquilinoDashboard />} />
         </Routes>
       </main>
 

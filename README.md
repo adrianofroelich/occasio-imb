@@ -74,12 +74,15 @@ occasio-imb/
 │   ├── hooks/
 │   │   └── useAuth.tsx     # Contexto e hook de autenticação e sessão com perfil integrado
 │   ├── lib/
+│   │   ├── compressor.ts   # Utilitário de compressão de imagens via Canvas no frontend
 │   │   ├── supabase.ts     # Inicialização e instância do SDK do Supabase Client
 │   │   └── utils.ts        # Utilitários de classes Tailwind (clsx + tailwind-merge)
 │   ├── pages/
 │   │   ├── imobiliaria/
 │   │   │   ├── Dashboard.tsx # Painel realtime de chamados estilo lista dinâmica
 │   │   │   └── Imoveis.tsx   # Cadastro e listagem de imóveis (Fase 3)
+│   │   ├── inquilino/
+│   │   │   └── Dashboard.tsx # Painel realtime e abertura de chamado do inquilino (Fase 4)
 │   │   ├── Beneficios.tsx  # Página detalhada de ROI e Gestão Patrimonial
 │   │   ├── Home.tsx        # Landing Page institucional da plataforma
 │   │   └── LoginTeste.tsx  # Simulador de autenticação para testes rápidos RLS
