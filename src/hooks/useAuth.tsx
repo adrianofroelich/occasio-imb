@@ -9,9 +9,11 @@ export type TipoPerfil = 'super_admin' | 'imobiliaria' | 'inquilino' | 'prestado
 export interface Perfil {
   id: string
   nome: string
+  email: string | null
   telefone: string | null
   perfil: TipoPerfil
   documento_identificacao: string | null
+  primeiro_acesso_pendente?: boolean
   criado_em: string
   atualizado_em: string
 }

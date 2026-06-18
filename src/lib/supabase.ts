@@ -13,3 +13,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 // Inicializa o cliente do Supabase
 export const supabase = createClient(supabaseUrl || "", supabaseAnonKey || "")
+
+// Inicializa o cliente administrativo do Supabase (para operações de onboarding da imobiliária)
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+
+export const supabaseAdmin = createClient(
+  supabaseUrl || "",
+  supabaseServiceRoleKey || "",
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+)

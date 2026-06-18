@@ -81,6 +81,7 @@ occasio-imb/
 │   │   └── utils.ts        # Utilitários de classes Tailwind (clsx + tailwind-merge)
 │   ├── pages/
 │   │   ├── imobiliaria/
+│   │   │   ├── Clientes.tsx  # Cadastro e onboarding de clientes com supabaseAdmin (Fase 8)
 │   │   │   ├── Dashboard.tsx # Painel realtime de chamados estilo lista dinâmica
 │   │   │   └── Imoveis.tsx   # Cadastro e listagem de imóveis (Fase 3)
 │   │   ├── inquilino/
@@ -91,7 +92,7 @@ occasio-imb/
 │   │   │   └── Dashboard.tsx # Painel de aprovações de orçamentos e histórico do proprietário (Fase 6)
 │   │   ├── Beneficios.tsx  # Página detalhada de ROI e Gestão Patrimonial
 │   │   ├── Home.tsx        # Landing Page institucional da plataforma
-│   │   └── LoginTeste.tsx  # Simulador de autenticação para testes rápidos RLS
+│   │   └── LoginTeste.tsx  # Simulador de autenticação para testes rápidos RLS (Fase 8)
 │   ├── App.tsx             # Roteador central e layout global com AuthProvider
 │   ├── main.tsx            # Arquivo de entrada do React
 │   └── index.css           # Estilos globais e tokens de cores Tailwind

@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "./hooks/useAuth"
 import LoginTeste from "./pages/LoginTeste"
 import Imoveis from "./pages/imobiliaria/Imoveis"
 import Dashboard from "./pages/imobiliaria/Dashboard"
+import Clientes from "./pages/imobiliaria/Clientes"
 import InquilinoDashboard from "./pages/inquilino/Dashboard"
 import PrestadorDashboard from "./pages/prestador/Dashboard"
 import ProprietarioDashboard from "./pages/proprietario/Dashboard"
@@ -81,6 +82,12 @@ function MainLayout() {
             {/* Links administrativos exclusivos para Imobiliária ou Super Admin */}
             {(perfil?.perfil === "imobiliaria" || perfil?.perfil === "super_admin") && (
               <>
+                <Link 
+                  to="/imobiliaria/clientes" 
+                  className={`${location.pathname === "/imobiliaria/clientes" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+                >
+                  Clientes
+                </Link>
                 <Link 
                   to="/imobiliaria/imoveis" 
                   className={`${location.pathname === "/imobiliaria/imoveis" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
@@ -177,6 +184,7 @@ function MainLayout() {
           <Route path="/" element={<Home />} />
           <Route path="/beneficios" element={<Beneficios />} />
           <Route path="/login-teste" element={<LoginTeste />} />
+          <Route path="/imobiliaria/clientes" element={<Clientes />} />
           <Route path="/imobiliaria/imoveis" element={<Imoveis />} />
           <Route path="/imobiliaria/dashboard" element={<Dashboard />} />
           <Route path="/inquilino/dashboard" element={<InquilinoDashboard />} />

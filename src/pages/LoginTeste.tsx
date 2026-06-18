@@ -1,10 +1,11 @@
-import { useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { useState, useEffect } from "react"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { CheckCircle2, AlertTriangle, Shield, Landmark, User, HardHat, UserCheck, LogOut } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { CheckCircle2, AlertTriangle, Shield, Landmark, User, HardHat, UserCheck, LogOut, Clock } from "lucide-react"
 
 // Estrutura das contas mockadas de teste
 const CONTAS_TESTE = [
@@ -70,10 +71,46 @@ const CONTAS_TESTE = [
   }
 ]
 
+interface UsuarioDinamico {
+  id: string
+  nome: string
+  email: string
+  perfil: 'inquilino' | 'proprietario' | 'prestador' | 'imobiliaria'
+  primeiro_acesso_pendente: boolean
+  telefone: string | null
+  documento_identificacao: string | null
+}
+
 export default function LoginTeste() {
   const { user, perfil, loading: authLoading, signOut } = useAuth()
   const [loading, setLoading] = useState<string | null>(null)
   const [alert, setAlert] = useState<{ type: "success" | "error"; message: string } | null>(null)
+  const [usuariosDinamicos, setUsuariosDinamicos] = useState<UsuarioDinamico[]>([])
+
+  // Carrega os usuários dinâmicos da tabela de perfis (excluindo os mockados fixos)
+  const carregarUsuariosDinamicos = async () => {
+    try {
+      const emailsMocks = CONTAS_TESTE.map(c => c.email)
+      const { data, error } = await supabase
+        .from("perfis")
+        .select("id, nome, email, perfil, primeiro_acesso_pendente, telefone, documento_identificacao")
+        .order("criado_em", { ascending: false })
+
+      if (error) throw error
+      
+      // Filtra e-mails válidos e que não sejam das contas estáticas de teste
+      const dinâmicos = (data || [])
+        .filter(u => u.email && !emailsMocks.includes(u.email)) as UsuarioDinamico[]
+        
+      setUsuariosDinamicos(dinâmicos)
+    } catch (err) {
+      console.error("Erro ao carregar usuários dinâmicos:", err)
+    }
+  }
+
+  useEffect(() => {
+    carregarUsuariosDinamicos()
+  }, [user])
 
   // Executa o login direto ou cadastra e loga se o usuário ainda não existir no auth.users
   const handleAcessoInstantaneo = async (conta: typeof CONTAS_TESTE[number]) => {
@@ -90,7 +127,7 @@ export default function LoginTeste() {
 
       if (signInError) {
         // 2. Se o erro for de usuário não encontrado, tenta realizar o cadastro
-        if (signInError.message.includes("Invalid login credentials")) {
+        if (signInError.message.includes("Invalid login credentials") || signInError.message.includes("User not found")) {
           const { error: signUpError } = await supabase.auth.signUp({
             email: conta.email,
             password: senhaPadrao,
@@ -99,7 +136,8 @@ export default function LoginTeste() {
                 nome: conta.nome,
                 perfil: conta.perfil,
                 telefone: conta.telefone,
-                documento_identificacao: conta.documento
+                documento_identificacao: conta.documento,
+                primeiro_acesso_pendente: false // contas mockadas estáticas já iniciam ativas
               }
             }
           })
@@ -132,6 +170,90 @@ export default function LoginTeste() {
       setAlert({
         type: "error",
         message: `Erro na autenticação: ${err.message || "Tente novamente."}`
+      })
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  // Simula o login ou primeiro acesso dos usuários dinâmicos
+  const handleAcessoDinamico = async (usuario: UsuarioDinamico) => {
+    setLoading(usuario.id)
+    setAlert(null)
+    const senhaPadrao = "occasio12345"
+
+    try {
+      if (usuario.primeiro_acesso_pendente) {
+        // Simulação de Primeiro Acesso:
+        // 1. Redefine a senha para a padrão usando a Admin API (supabaseAdmin)
+        const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
+          usuario.id,
+          { password: senhaPadrao }
+        )
+        if (updateAuthError) throw updateAuthError
+
+        // 2. Atualiza a flag na tabela public.perfis
+        const { error: updatePerfilError } = await supabase
+          .from("perfis")
+          .update({ primeiro_acesso_pendente: false })
+          .eq("id", usuario.id)
+        if (updatePerfilError) throw updatePerfilError
+
+        // 3. Faz login normal
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: usuario.email,
+          password: senhaPadrao
+        })
+        if (signInError) throw signInError
+
+        setAlert({
+          type: "success",
+          message: `Primeiro acesso realizado! Senha definida para "${senhaPadrao}" e login efetuado com sucesso como ${usuario.nome}.`
+        })
+      } else {
+        // Login normal
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: usuario.email,
+          password: senhaPadrao
+        })
+
+        if (signInError) {
+          // Fallback se a senha não estiver sincronizada: redefinimos administrativamente e logamos
+          if (signInError.message.includes("Invalid login credentials") || signInError.message.includes("User not found")) {
+            const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
+              usuario.id,
+              { password: senhaPadrao }
+            )
+            if (updateAuthError) throw updateAuthError
+
+            const { error: retryError } = await supabase.auth.signInWithPassword({
+              email: usuario.email,
+              password: senhaPadrao
+            })
+            if (retryError) throw retryError
+
+            setAlert({
+              type: "success",
+              message: `Senha resincronizada para "${senhaPadrao}". Logado com sucesso como: ${usuario.nome}`
+            })
+          } else {
+            throw signInError
+          }
+        } else {
+          setAlert({
+            type: "success",
+            message: `Logado com sucesso como: ${usuario.nome} (${usuario.perfil.toUpperCase()})`
+          })
+        }
+      }
+      
+      // Recarrega a lista dinamicamente
+      await carregarUsuariosDinamicos()
+    } catch (err: any) {
+      console.error(err)
+      setAlert({
+        type: "error",
+        message: `Erro ao simular acesso dinâmico: ${err.message || "Tente novamente."}`
       })
     } finally {
       setLoading(null)
@@ -208,12 +330,12 @@ export default function LoginTeste() {
         </CardContent>
       </Card>
 
-      {/* Listagem de Perfis de Teste */}
-      <h2 className="text-xl font-bold text-occasio-navy mb-6">Selecione um Perfil para Simular</h2>
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Listagem de Perfis de Teste Fixos */}
+      <h2 className="text-xl font-bold text-occasio-navy mb-6">Contas Estáticas de Homologação</h2>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
         {CONTAS_TESTE.map((conta) => {
           const Icone = conta.icone
-          const isAtivo = perfil?.perfil === conta.perfil
+          const isAtivo = perfil?.perfil === conta.perfil && user?.email === conta.email
 
           return (
             <Card key={conta.perfil} className={`flex flex-col border transition-all duration-300 hover:shadow-lg ${isAtivo ? "ring-2 ring-occasio-blue border-occasio-blue" : "border-slate-200"}`}>
@@ -246,6 +368,93 @@ export default function LoginTeste() {
             </Card>
           )
         })}
+      </div>
+
+      {/* Listagem de Usuários Cadastrados Dinamicamente */}
+      <div className="mt-12">
+        <div className="flex flex-col mb-6">
+          <h2 className="text-xl font-bold text-occasio-navy flex items-center gap-2">
+            <User className="h-6 w-6 text-occasio-blue" />
+            Clientes Cadastrados no Onboarding
+          </h2>
+          <p className="text-slate-500 text-xs mt-1">
+            Usuários criados dinamicamente no painel de Clientes da Imobiliária. Simule o Primeiro Acesso (definição de senha) ou faça o login normal.
+          </p>
+        </div>
+
+        {usuariosDinamicos.length === 0 ? (
+          <Card className="border-dashed border-slate-300 bg-slate-50/50 p-8 text-center text-slate-500">
+            <User className="h-10 w-10 mx-auto text-slate-300 mb-2" />
+            <p className="text-sm font-medium">Nenhum cliente dinâmico cadastrado ainda.</p>
+            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+              Acesse a tela de Clientes com uma conta de Imobiliária (/imobiliaria/clientes) e cadastre proprietários ou inquilinos para vê-los aqui.
+            </p>
+          </Card>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {usuariosDinamicos.map((usuario) => {
+              const isAtivo = user?.id === usuario.id
+              const Icone = usuario.perfil === "inquilino" ? UserCheck : User
+              const corBadge = usuario.perfil === "inquilino" 
+                ? "bg-sky-50 text-sky-700 border-sky-200" 
+                : "bg-amber-50 text-amber-700 border-amber-200"
+
+              return (
+                <Card key={usuario.id} className={`flex flex-col border transition-all duration-300 hover:shadow-lg ${isAtivo ? "ring-2 ring-occasio-blue border-occasio-blue" : "border-slate-200"}`}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`p-1 rounded ${usuario.perfil === "inquilino" ? "bg-sky-50" : "bg-amber-50"}`}>
+                          <Icone className={`h-3.5 w-3.5 ${usuario.perfil === "inquilino" ? "text-sky-600" : "text-amber-600"}`} />
+                        </div>
+                        <Badge variant="outline" className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${corBadge}`}>
+                          {usuario.perfil === "inquilino" ? "Inquilino" : "Proprietário"}
+                        </Badge>
+                      </div>
+                      {usuario.primeiro_acesso_pendente ? (
+                        <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                          <Clock className="h-3 w-3" /> 1º Acesso Pendente
+                        </span>
+                      ) : (
+                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                          Ativo
+                        </span>
+                      )}
+                    </div>
+                    <CardTitle className="text-base text-occasio-navy truncate">{usuario.nome}</CardTitle>
+                    <CardDescription className="text-xs font-mono truncate">{usuario.email}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-grow flex flex-col justify-between space-y-4 pt-0">
+                    <div className="text-xs text-slate-500 space-y-1">
+                      {usuario.telefone && <p><strong>Tel:</strong> {usuario.telefone}</p>}
+                      {usuario.documento_identificacao && <p><strong>Doc:</strong> {usuario.documento_identificacao}</p>}
+                    </div>
+                    
+                    <Button
+                      onClick={() => handleAcessoDinamico(usuario)}
+                      disabled={loading !== null || authLoading}
+                      className={`w-full text-xs shadow-md font-semibold transition-all ${
+                        isAtivo 
+                          ? "bg-slate-200 text-slate-600 hover:bg-slate-300" 
+                          : usuario.primeiro_acesso_pendente 
+                            ? "bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/10" 
+                            : "bg-occasio-blue hover:bg-occasio-navy text-white shadow-occasio-blue/10"
+                      }`}
+                    >
+                      {loading === usuario.id 
+                        ? "Processando..." 
+                        : isAtivo 
+                          ? "Logado" 
+                          : usuario.primeiro_acesso_pendente 
+                            ? "Simular Primeiro Acesso" 
+                            : "Acessar Painel"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
