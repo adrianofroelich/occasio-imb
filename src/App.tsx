@@ -77,14 +77,12 @@ export default function App() {
               </div>
             </div>
             
-            <div className="relative mx-auto w-full max-w-[500px] lg:max-w-none">
-              <div className="relative rounded-3xl bg-[#002244] p-2 backdrop-blur-sm border border-white/10 shadow-2xl overflow-hidden">
-                <img 
-                  src="/helmet.png" 
-                  alt="Capacete de Manutenção 3D" 
-                  className="w-full object-contain drop-shadow-2xl hover:scale-105 transition-transform duration-700 ease-out animate-in fade-in zoom-in"
-                />
-              </div>
+            <div className="relative mx-auto w-full max-w-[450px] lg:max-w-none flex justify-center">
+              <img 
+                src="/Personagem1.png" 
+                alt="Personagem Occasio Imob" 
+                className="w-full max-h-[500px] object-contain drop-shadow-[0_35px_35px_rgba(0,0,0,0.4)] hover:scale-105 transition-transform duration-700 ease-out animate-in fade-in zoom-in"
+              />
             </div>
           </div>
         </div>
