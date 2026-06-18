@@ -3,7 +3,10 @@ import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from "re
 import Home from "./pages/Home"
 import Beneficios from "./pages/Beneficios"
 import { Button } from "@/components/ui/button"
-import { AuthProvider } from "./hooks/useAuth"
+import { AuthProvider, useAuth } from "./hooks/useAuth"
+import LoginTeste from "./pages/LoginTeste"
+import Imoveis from "./pages/imobiliaria/Imoveis"
+import Dashboard from "./pages/imobiliaria/Dashboard"
 
 // Componente auxiliar para tratar rolagem suave de âncoras (hash)
 // e garantir que a página role para o topo ao alternar de rota
@@ -32,6 +35,7 @@ function MainLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const isHome = location.pathname === "/"
+  const { user, perfil, signOut } = useAuth()
 
   // Ação de clique na logo (rola para o topo se já estiver na home, senão vai para a home)
   const handleLogoClick = () => {
@@ -70,19 +74,63 @@ function MainLayout() {
             >
               Benefícios
             </Link>
+
+            {/* Links administrativos exclusivos para Imobiliária ou Super Admin */}
+            {(perfil?.perfil === "imobiliaria" || perfil?.perfil === "super_admin") && (
+              <>
+                <Link 
+                  to="/imobiliaria/imoveis" 
+                  className={`${location.pathname === "/imobiliaria/imoveis" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+                >
+                  Imóveis
+                </Link>
+                <Link 
+                  to="/imobiliaria/dashboard" 
+                  className={`${location.pathname === "/imobiliaria/dashboard" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+                >
+                  Painel OS
+                </Link>
+              </>
+            )}
             
             {isHome ? (
               <a href="#features" className="hover:text-occasio-blue transition-colors">Como Funciona</a>
             ) : (
               <Link to="/#features" className="hover:text-occasio-blue transition-colors">Como Funciona</Link>
             )}
+
+            <Link 
+              to="/login-teste" 
+              className="text-xs bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 px-2.5 py-1 rounded transition-all font-semibold"
+            >
+              Simulador
+            </Link>
           </nav>
           
           {/* Botões de Ação da Direita */}
           <div className="flex items-center gap-2 sm:gap-4">
-            <Button variant="ghost" className="text-occasio-navy hover:text-occasio-blue text-sm md:text-base px-2 md:px-4">
-              Login
-            </Button>
+            {user && perfil ? (
+              <div className="flex items-center gap-2 md:gap-4 text-xs">
+                <span className="hidden lg:inline text-slate-500 font-medium">
+                  Olá, <strong className="text-occasio-navy">{perfil.nome.split(" ")[0]}</strong> ({perfil.perfil.replace("_", " ")})
+                </span>
+                <Button 
+                  variant="outline" 
+                  onClick={signOut}
+                  className="text-red-600 border-red-200 hover:bg-red-50 text-xs px-2.5 h-8 py-1"
+                >
+                  Sair
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                variant="ghost" 
+                onClick={() => navigate("/login-teste")}
+                className="text-occasio-navy hover:text-occasio-blue text-sm md:text-base px-2 md:px-4"
+              >
+                Entrar
+              </Button>
+            )}
             <Button className="bg-occasio-blue hover:bg-occasio-navy text-white shadow-lg shadow-occasio-blue/20 transition-all text-xs sm:text-sm px-3 sm:px-4">
               Agendar Demo
             </Button>
@@ -95,6 +143,9 @@ function MainLayout() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/beneficios" element={<Beneficios />} />
+          <Route path="/login-teste" element={<LoginTeste />} />
+          <Route path="/imobiliaria/imoveis" element={<Imoveis />} />
+          <Route path="/imobiliaria/dashboard" element={<Dashboard />} />
         </Routes>
       </main>
 

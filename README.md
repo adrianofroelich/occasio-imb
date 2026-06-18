@@ -12,7 +12,7 @@ O **Occasio.Imob** é uma plataforma SaaS de gestão de manutenção predial foc
 - **Componentes:** Shadcn UI + Radix UI + Lucide Icons
 - **PWA:** Habilitado via `@vite-plugin-pwa` para suporte offline e instalabilidade.
 - **Deploy:** Containerizado via Docker (pronto para EasyPanel / VPS Hostinger).
-- **Backend (Futuro):** Integração com Supabase (Autenticação, PostgreSQL e Storage).
+- **Backend:** Supabase (Autenticação nativa, PostgreSQL com RLS e Realtime ativo).
 
 ---
 
@@ -62,15 +62,28 @@ Para manter a consistência do projeto, todos os desenvolvedores (e IAs auxiliar
 
 ```bash
 occasio-imb/
+├── .agents/                # Configurações e diretrizes de desenvolvimento local (IAs)
 ├── logo/                   # Contém os arquivos originais da logomarca oficial
 ├── public/                 # Assets estáticos globais (favicon, logo, imagens 3D)
+├── supabase/               # Arquivos e migrations do banco de dados remoto
+│   └── migrations/         # DDLs, triggers e políticas RLS
 ├── src/
 │   ├── assets/             # Imagens e vetores secundários do app
 │   ├── components/
-│   │   └── ui/             # Componentes primitivos do Shadcn UI (Badge, Button, Card)
+│   │   └── ui/             # Componentes primitivos do Shadcn UI (Badge, Button, Card, Input)
+│   ├── hooks/
+│   │   └── useAuth.tsx     # Contexto e hook de autenticação e sessão com perfil integrado
 │   ├── lib/
-│   │   └── utils.ts        # Utilitários de junção de classes Tailwind (clsx + tailwind-merge)
-│   ├── App.tsx             # Componente central contendo a Landing Page e logo interativa
+│   │   ├── supabase.ts     # Inicialização e instância do SDK do Supabase Client
+│   │   └── utils.ts        # Utilitários de classes Tailwind (clsx + tailwind-merge)
+│   ├── pages/
+│   │   ├── imobiliaria/
+│   │   │   ├── Dashboard.tsx # Painel realtime de chamados estilo lista dinâmica
+│   │   │   └── Imoveis.tsx   # Cadastro e listagem de imóveis (Fase 3)
+│   │   ├── Beneficios.tsx  # Página detalhada de ROI e Gestão Patrimonial
+│   │   ├── Home.tsx        # Landing Page institucional da plataforma
+│   │   └── LoginTeste.tsx  # Simulador de autenticação para testes rápidos RLS
+│   ├── App.tsx             # Roteador central e layout global com AuthProvider
 │   ├── main.tsx            # Arquivo de entrada do React
 │   └── index.css           # Estilos globais e tokens de cores Tailwind
 ├── Dockerfile              # Script de containerização do app
