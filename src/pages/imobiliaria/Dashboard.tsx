@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import VisualizadorImagem from "@/components/VisualizadorImagem"
+import LaudoTecnico from "@/components/LaudoTecnico"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -86,6 +87,7 @@ export default function Dashboard() {
   const [midias, setMidias] = useState<{ id: string; url_storage: string; tipo_midia: string }[]>([])
   const [urlImagemZoom, setUrlImagemZoom] = useState<string | null>(null)
   const [orcamentoAtivo, setOrcamentoAtivo] = useState<any | null>(null)
+  const [mostrarLaudo, setMostrarLaudo] = useState(false)
 
   // Sincroniza mídias e orçamento sempre que o chamado ativo mudar
   useEffect(() => {
@@ -316,6 +318,44 @@ export default function Dashboard() {
     } catch (err: any) {
       console.error(err)
       setErro(err.message || "Erro ao autorizar execução.")
+    } finally {
+      setSalvandoAcao(false)
+    }
+  }
+
+  // Encerra o chamado após a conclusão dos reparos
+  const handleEncerrarChamado = async () => {
+    if (!chamadoAtivo) return
+    setSalvandoAcao(true)
+    setErro(null)
+
+    try {
+      // 1. Atualiza o status do chamado para encerrado
+      const { error: chamadoError } = await supabase
+        .from("chamados")
+        .update({ status: "encerrado" })
+        .eq("id", chamadoAtivo.id)
+
+      if (chamadoError) throw chamadoError
+
+      // 2. Registra a ação no histórico
+      const { error: historicoError } = await supabase
+        .from("historico_chamados")
+        .insert({
+          chamado_id: chamadoAtivo.id,
+          usuario_id: user?.id,
+          status_anterior: chamadoAtivo.status,
+          novo_status: "encerrado",
+          observacao: "Serviço homologado e concluído. Chamado encerrado pela Imobiliária."
+        })
+
+      if (historicoError) throw historicoError
+
+      setChamadoAtivo(null)
+      await loadChamados()
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro ao encerrar chamado.")
     } finally {
       setSalvandoAcao(false)
     }
@@ -694,6 +734,54 @@ export default function Dashboard() {
                       {salvandoAcao ? "Autorizando..." : <>✅ Autorizar Execução do Serviço</>}
                     </Button>
                   </div>
+                ) : chamadoAtivo.status === "servico_concluido" ? (
+                  <div className="space-y-4 pt-1">
+                    <div className="bg-slate-50 p-3 rounded border border-slate-200/50 text-xs space-y-1.5">
+                      <div className="font-bold text-slate-700">Relatório de Conclusão</div>
+                      <p className="text-[11px] text-slate-600 bg-white p-2 rounded leading-relaxed italic border border-slate-100">
+                        &ldquo;{orcamentoAtivo?.relatorio_conclusao || "Nenhum relatório técnico cadastrado."}&rdquo;
+                      </p>
+                    </div>
+
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded text-xs space-y-1">
+                      <div className="font-bold flex items-center gap-1">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        Reparos Finalizados
+                      </div>
+                      <p className="text-[11px] leading-relaxed">
+                        O prestador técnico concluiu a execução e submeteu as fotos comprobatórias do "Depois". Revise as fotos na galeria abaixo e homologue o encerramento.
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      disabled={salvandoAcao}
+                      onClick={handleEncerrarChamado}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold h-10 flex items-center gap-1.5 justify-center shadow"
+                    >
+                      {salvandoAcao ? "Homologando..." : <>Aprovar Conclusão &amp; Encerrar</>}
+                    </Button>
+                  </div>
+                ) : chamadoAtivo.status === "encerrado" ? (
+                  <div className="space-y-4 pt-1">
+                    <div className="bg-slate-50 border border-slate-200 text-slate-700 p-3 rounded text-xs space-y-2">
+                      <div className="font-bold flex items-center gap-1 text-occasio-navy">
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        Histórico Arquivado
+                      </div>
+                      <p className="text-[11px] leading-relaxed">
+                        Este chamado foi concluído e encerrado definitivamente. O laudo técnico com o comparativo de fotos do Antes e Depois está gerado e disponível para consulta.
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      onClick={() => setMostrarLaudo(true)}
+                      className="w-full bg-occasio-blue hover:bg-occasio-navy text-white text-xs font-bold h-10 flex items-center gap-1.5 justify-center shadow"
+                    >
+                      <FileText className="h-4 w-4" /> Visualizar Laudo Técnico
+                    </Button>
+                  </div>
                 ) : (
                   <form onSubmit={handleAplicarAcao} className="space-y-5">
                     <div>
@@ -815,6 +903,15 @@ export default function Dashboard() {
         <VisualizadorImagem 
           src={urlImagemZoom} 
           onClose={() => setUrlImagemZoom(null)} 
+        />
+      )}
+
+      {/* Modal de Laudo Técnico */}
+      {mostrarLaudo && chamadoAtivo && (
+        <LaudoTecnico 
+          chamado={chamadoAtivo}
+          midias={midias}
+          onClose={() => setMostrarLaudo(false)}
         />
       )}
     </div>

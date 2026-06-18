@@ -71,6 +71,7 @@ occasio-imb/
 │   ├── assets/             # Imagens e vetores secundários do app
 │   ├── components/
 │   │   ├── ui/             # Componentes primitivos do Shadcn UI (Badge, Button, Card, Input)
+│   │   ├── LaudoTecnico.tsx # Componente modal do Laudo Técnico consolidado e print-friendly (Fase 7)
 │   │   └── VisualizadorImagem.tsx # Modal de visualização de vistorias com Zoom interativo (Fase 5)
 │   ├── hooks/
 │   │   └── useAuth.tsx     # Contexto e hook de autenticação e sessão com perfil integrado

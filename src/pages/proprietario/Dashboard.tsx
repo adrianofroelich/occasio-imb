@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import VisualizadorImagem from "@/components/VisualizadorImagem"
+import LaudoTecnico from "@/components/LaudoTecnico"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -87,6 +88,7 @@ export default function ProprietarioDashboard() {
   // Modal de esclarecimentos
   const [mostrarModalEsclarecimento, setMostrarModalEsclarecimento] = useState(false)
   const [textoEsclarecimento, setTextoEsclarecimento] = useState("")
+  const [mostrarLaudo, setMostrarLaudo] = useState(false)
 
   // Carrega os dados vinculados ao Proprietário logado
   const loadProprietarioData = async (silencioso = false) => {
@@ -523,11 +525,25 @@ export default function ProprietarioDashboard() {
                           <Calendar className="h-3 w-3 text-slate-300" />
                           <span>Finalizado em: <strong>{new Date(chamado.criado_em).toLocaleDateString('pt-BR')}</strong></span>
                         </div>
-                        {orcamento && (
-                          <div>
-                            Custo Total: <strong className="text-occasio-navy">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-3">
+                          {orcamento && (
+                            <div>
+                              Custo Total: <strong className="text-occasio-navy">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                            </div>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setChamadoAtivo(chamado)
+                              setMostrarLaudo(true)
+                            }}
+                            className="text-[10px] h-7 px-2 border-slate-200"
+                          >
+                            Laudo Técnico
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -740,6 +756,15 @@ export default function ProprietarioDashboard() {
         <VisualizadorImagem 
           src={urlImagemZoom} 
           onClose={() => setUrlImagemZoom(null)} 
+        />
+      )}
+
+      {/* Modal de Laudo Técnico */}
+      {mostrarLaudo && chamadoAtivo && (
+        <LaudoTecnico 
+          chamado={chamadoAtivo}
+          midias={midias}
+          onClose={() => setMostrarLaudo(false)}
         />
       )}
 
