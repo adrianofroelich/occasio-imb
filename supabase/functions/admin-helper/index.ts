@@ -48,10 +48,13 @@ export default {
       if (action === "simular-primeiro-acesso") {
         const { userId, password } = body;
 
-        // 1. Atualiza a senha no Auth do Supabase
+        // 1. Atualiza a senha no Auth do Supabase e garante a confirmação do e-mail
         const { data: authData, error: authError } = await ctx.supabaseAdmin.auth.admin.updateUserById(
           userId,
-          { password }
+          { 
+            password,
+            email_confirm: true
+          }
         );
 
         if (authError) {

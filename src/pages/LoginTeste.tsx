@@ -126,8 +126,11 @@ export default function LoginTeste() {
       })
 
       if (signInError) {
-        // Se a senha estiver incorreta ou o usuário não for encontrado
-        if (signInError.message.includes("Invalid login credentials") || signInError.message.includes("User not found")) {
+        if (
+          signInError.message.includes("Invalid login credentials") || 
+          signInError.message.includes("User not found") || 
+          signInError.message.includes("Email not confirmed")
+        ) {
           
           // 2. Verifica se o usuário já existe na tabela de perfis para resgatar o ID dele
           const { data: perfilData } = await supabase
