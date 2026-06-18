@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { comprimirImagem } from "@/lib/compressor"
 import VisualizadorImagem from "@/components/VisualizadorImagem"
 import LaudoTecnico from "@/components/LaudoTecnico"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Wrench, ShieldAlert, Clock, CheckSquare, RefreshCw, Filter, 
-  AlertCircle, FileText, User, HelpCircle, Loader2, Hammer, CheckCircle2
+  AlertCircle, FileText, User, HelpCircle, Loader2, Hammer, CheckCircle2, Plus
 } from "lucide-react"
 
 // Interfaces de tipos mapeados
@@ -71,6 +73,24 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [realtimeLoading, setRealtimeLoading] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+
+  // Estados para abertura de chamado pela imobiliária
+  const [formChamadoAberto, setFormChamadoAberto] = useState(false)
+  const [imoveisDisponiveis, setImoveisDisponiveis] = useState<any[]>([])
+  const [inquilinosDisponiveis, setInquilinosDisponiveis] = useState<any[]>([])
+  const [novoChamadoImovelId, setNovoChamadoImovelId] = useState("")
+  const [novoChamadoInquilinoId, setNovoChamadoInquilinoId] = useState("")
+  const [novoChamadoInquilinoNome, setNovoChamadoInquilinoNome] = useState("")
+  const [novoChamadoInquilinoBloqueado, setNovoChamadoInquilinoBloqueado] = useState(false)
+  const [novoChamadoTitulo, setNovoChamadoTitulo] = useState("")
+  const [novoChamadoCategoria, setNovoChamadoCategoria] = useState("")
+  const [novoChamadoDescricao, setNovoChamadoDescricao] = useState("")
+  const [novoChamadoDisponibilidade, setNovoChamadoDisponibilidade] = useState("")
+  const [novoChamadoImagem, setNovoChamadoImagem] = useState<File | null>(null)
+  const [novoChamadoImagemPreview, setNovoChamadoImagemPreview] = useState<string | null>(null)
+  const [salvandoNovoChamado, setSalvandoNovoChamado] = useState(false)
+  
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Estados de filtros
   const [filtroStatus, setFiltroStatus] = useState<string>("todos")
@@ -127,6 +147,177 @@ export default function Dashboard() {
     }
   }, [chamadoAtivo])
 
+  // Carrega imóveis e inquilinos para o formulário de abertura de chamado
+  const carregarDadosFormularioChamado = async () => {
+    try {
+      // 1. Carrega todos os imóveis da imobiliária
+      let queryImoveis = supabase
+        .from("imoveis")
+        .select("id, codigo_imovel, endereco, inquilino_id, inquilino:inquilino_id (nome)")
+        .order("codigo_imovel")
+
+      if (perfil?.perfil === "imobiliaria") {
+        queryImoveis = queryImoveis.eq("imobiliaria_id", user?.id)
+      }
+
+      const { data: imoveisData, error: imoveisError } = await queryImoveis
+      if (imoveisError) throw imoveisError
+      setImoveisDisponiveis(imoveisData || [])
+
+      // 2. Carrega todos os inquilinos cadastrados (para os imóveis sem inquilino fixado)
+      const { data: inquilinosData, error: inquilinosError } = await supabase
+        .from("perfis")
+        .select("id, nome")
+        .eq("perfil", "inquilino")
+        .order("nome")
+      if (inquilinosError) throw inquilinosError
+      setInquilinosDisponiveis(inquilinosData || [])
+
+    } catch (err) {
+      console.error("Erro ao carregar dados do formulário de chamados:", err)
+    }
+  }
+
+  useEffect(() => {
+    if (user && perfil && (perfil.perfil === "imobiliaria" || perfil.perfil === "super_admin")) {
+      carregarDadosFormularioChamado()
+    }
+  }, [user, perfil])
+
+  const handleNovoChamadoImovelChange = (imovelId: string) => {
+    setNovoChamadoImovelId(imovelId)
+    const imovelSelecionado = imoveisDisponiveis.find(i => i.id === imovelId)
+    
+    if (imovelSelecionado && imovelSelecionado.inquilino_id) {
+      // O imóvel já possui inquilino vinculado
+      setNovoChamadoInquilinoId(imovelSelecionado.inquilino_id)
+      setNovoChamadoInquilinoNome(imovelSelecionado.inquilino?.nome || "Inquilino Vinculado")
+      setNovoChamadoInquilinoBloqueado(true)
+    } else {
+      // Imóvel sem inquilino vinculado: libera o dropdown de seleção
+      setNovoChamadoInquilinoId("")
+      setNovoChamadoInquilinoNome("")
+      setNovoChamadoInquilinoBloqueado(false)
+    }
+  }
+
+  const handleNovoChamadoImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const arquivo = e.target.files?.[0]
+    if (!arquivo) return
+
+    try {
+      const arquivoComprimido = await comprimirImagem(arquivo)
+      
+      setNovoChamadoImagem(arquivoComprimido)
+      const previewUrl = URL.createObjectURL(arquivoComprimido)
+      setNovoChamadoImagemPreview(previewUrl)
+    } catch (err) {
+      console.error("Erro ao comprimir imagem:", err)
+    }
+  }
+
+  const handleSalvarNovoChamado = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErro(null)
+
+    if (!novoChamadoImovelId) {
+      setErro("Selecione o imóvel do chamado.")
+      return
+    }
+    if (!novoChamadoInquilinoId) {
+      setErro("Selecione ou vincule um inquilino para este chamado.")
+      return
+    }
+    if (!novoChamadoTitulo.trim()) {
+      setErro("Insira um título para o chamado.")
+      return
+    }
+    if (!novoChamadoCategoria) {
+      setErro("Selecione a categoria do serviço.")
+      return
+    }
+    if (!novoChamadoDescricao.trim()) {
+      setErro("Descreva o problema detalhadamente.")
+      return
+    }
+
+    try {
+      setSalvandoNovoChamado(true)
+
+      // 1. Insere o chamado na tabela public.chamados
+      const { data: chamadoCriado, error: chamadoError } = await supabase
+        .from("chamados")
+        .insert({
+          imovel_id: novoChamadoImovelId,
+          inquilino_id: novoChamadoInquilinoId,
+          titulo: novoChamadoTitulo.trim(),
+          descricao_problema: novoChamadoDescricao.trim(),
+          categoria: novoChamadoCategoria,
+          disponibilidade_atendimento: novoChamadoDisponibilidade.trim() || "A combinar com a imobiliária",
+          status: "em_triagem"
+        })
+        .select()
+        .single()
+
+      if (chamadoError) throw chamadoError
+
+      // 2. Insere histórico
+      await supabase.from("historico_chamados").insert({
+        chamado_id: chamadoCriado.id,
+        usuario_id: user?.id,
+        novo_status: "em_triagem",
+        observacao: "Chamado aberto administrativamente pela imobiliária."
+      })
+
+      // 3. Upload de mídia se selecionada
+      if (novoChamadoImagem) {
+        const extensao = novoChamadoImagem.type.split("/")[1] || "jpg"
+        const caminho = `chamados/${chamadoCriado.id}_antes.${extensao}`
+
+        const { error: uploadError } = await supabase.storage
+          .from("chamados-midias")
+          .upload(caminho, novoChamadoImagem)
+
+        if (uploadError) throw uploadError
+
+        const { data: urlData } = supabase.storage
+          .from("chamados-midias")
+          .getPublicUrl(caminho)
+
+        const { error: midiaError } = await supabase
+          .from("chamados_midias")
+          .insert({
+            chamado_id: chamadoCriado.id,
+            usuario_id: user?.id,
+            url_storage: urlData.publicUrl,
+            tipo_midia: "antes"
+          })
+
+        if (midiaError) throw midiaError
+      }
+
+      setNovoChamadoImovelId("")
+      setNovoChamadoInquilinoId("")
+      setNovoChamadoInquilinoNome("")
+      setNovoChamadoInquilinoBloqueado(false)
+      setNovoChamadoTitulo("")
+      setNovoChamadoCategoria("")
+      setNovoChamadoDescricao("")
+      setNovoChamadoDisponibilidade("")
+      setNovoChamadoImagem(null)
+      setNovoChamadoImagemPreview(null)
+      setFormChamadoAberto(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+
+      await loadChamados()
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro inesperado ao criar o chamado.")
+    } finally {
+      setSalvandoNovoChamado(false)
+    }
+  }
+
   // Função para buscar os chamados no banco de dados
   const loadChamados = async (silencioso = false) => {
     if (!silencioso) setLoading(true)
@@ -165,7 +356,7 @@ export default function Dashboard() {
       setChamados((data as unknown) as Chamado[] || [])
     } catch (err: any) {
       console.error(err)
-      setErro("Não foi possível carregar a lista de chamados. Verifique se possui permissões adequadas.")
+      setErro(`Não foi possível carregar a lista de chamados: ${err.message || err.details || JSON.stringify(err)}`)
     } finally {
       setLoading(false)
       setRealtimeLoading(false)
@@ -439,6 +630,12 @@ export default function Dashboard() {
               <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Atualizando...
             </span>
           )}
+          <Button 
+            onClick={() => setFormChamadoAberto(!formChamadoAberto)}
+            className="bg-occasio-blue hover:bg-occasio-navy text-white text-xs flex gap-1 font-semibold"
+          >
+            <Plus className="h-3.5 w-3.5" /> Novo Chamado
+          </Button>
           <Button variant="outline" size="sm" onClick={() => loadChamados()} className="text-xs flex gap-1 bg-white border-slate-200">
             <RefreshCw className="h-3.5 w-3.5" /> Forçar Recarga
           </Button>
@@ -450,6 +647,149 @@ export default function Dashboard() {
           <AlertCircle className="h-5 w-5 text-red-600" />
           <AlertDescription className="font-semibold">{erro}</AlertDescription>
         </Alert>
+      )}
+
+      {/* Formulário de Abertura de Chamado pela Imobiliária */}
+      {formChamadoAberto && (
+        <Card className="mb-8 border-slate-200 shadow-md">
+          <CardHeader className="bg-slate-50 border-b border-slate-200">
+            <CardTitle className="text-occasio-navy text-lg flex items-center gap-2">
+              <Plus className="h-5 w-5 text-occasio-blue" />
+              Abrir Novo Chamado de Manutenção
+            </CardTitle>
+            <CardDescription>
+              Abra um chamado em nome do inquilino ou para um imóvel sob gestão.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <form onSubmit={handleSalvarNovoChamado} className="space-y-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Imóvel Afetado *</label>
+                  <select
+                    value={novoChamadoImovelId}
+                    onChange={(e) => handleNovoChamadoImovelChange(e.target.value)}
+                    className="w-full border border-slate-200 rounded-md h-10 px-3 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-occasio-blue"
+                    required
+                  >
+                    <option value="">Selecione um Imóvel...</option>
+                    {imoveisDisponiveis.map(i => (
+                      <option key={i.id} value={i.id}>
+                        {i.codigo_imovel} - {i.endereco}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Inquilino Relacionado *</label>
+                  {novoChamadoInquilinoBloqueado ? (
+                    <div className="flex items-center h-10 px-3 bg-slate-100 border border-slate-200 rounded-md text-sm text-slate-600 font-semibold">
+                      {novoChamadoInquilinoNome}
+                    </div>
+                  ) : (
+                    <select
+                      value={novoChamadoInquilinoId}
+                      onChange={(e) => setNovoChamadoInquilinoId(e.target.value)}
+                      className="w-full border border-slate-200 rounded-md h-10 px-3 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-occasio-blue"
+                      required
+                    >
+                      <option value="">Selecione um Inquilino...</option>
+                      {inquilinosDisponiveis.map(inq => (
+                        <option key={inq.id} value={inq.id}>
+                          {inq.nome}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <span className="text-[10px] text-slate-400">
+                    {novoChamadoInquilinoBloqueado 
+                      ? "Inquilino fixado conforme o cadastro oficial do imóvel." 
+                      : "Selecione o perfil do inquilino para vincular a este chamado."}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-6">
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Título do Chamado *</label>
+                  <Input
+                    placeholder="Ex: Vazamento sob a pia da cozinha, Disjuntor caindo"
+                    value={novoChamadoTitulo}
+                    onChange={(e) => setNovoChamadoTitulo(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Categoria do Serviço *</label>
+                  <select
+                    value={novoChamadoCategoria}
+                    onChange={(e) => setNovoChamadoCategoria(e.target.value)}
+                    className="w-full border border-slate-200 rounded-md h-10 px-3 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-occasio-blue"
+                    required
+                  >
+                    <option value="">Selecione...</option>
+                    <option value="Elétrica">Elétrica</option>
+                    <option value="Hidráulica">Hidráulica</option>
+                    <option value="Pintura">Pintura</option>
+                    <option value="Reparos">Reparos e Alvenaria</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">Descrição Detalhada do Problema *</label>
+                <textarea
+                  placeholder="Descreva o que está ocorrendo, local, severidade do problema..."
+                  value={novoChamadoDescricao}
+                  onChange={(e) => setNovoChamadoDescricao(e.target.value)}
+                  className="w-full border border-slate-200 rounded-md p-3 text-sm focus:outline-none focus:ring-2 focus:ring-occasio-blue h-24 bg-white"
+                  required
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Disponibilidade para Atendimento</label>
+                  <Input
+                    placeholder="Ex: Qualquer dia à tarde, Apenas sábados pela manhã"
+                    value={novoChamadoDisponibilidade}
+                    onChange={(e) => setNovoChamadoDisponibilidade(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Foto do Problema (Antes)</label>
+                  <div className="flex gap-4 items-center">
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleNovoChamadoImageChange}
+                      className="border-slate-200 text-xs"
+                    />
+                    {novoChamadoImagemPreview && (
+                      <div className="relative h-10 w-10 border rounded overflow-hidden shrink-0">
+                        <img src={novoChamadoImagemPreview} alt="Preview" className="h-full w-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="outline" type="button" onClick={() => setFormChamadoAberto(false)}>
+                  Cancelar
+                </Button>
+                <Button disabled={salvandoNovoChamado} type="submit" className="bg-occasio-blue hover:bg-occasio-navy text-white font-semibold">
+                  {salvandoNovoChamado ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Abrir Chamado
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
       {/* Painel de Filtros e Resumos Rápidos */}
