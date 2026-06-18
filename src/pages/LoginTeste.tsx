@@ -126,36 +126,71 @@ export default function LoginTeste() {
       })
 
       if (signInError) {
-        // 2. Se o erro for de usuário não encontrado, tenta realizar o cadastro
+        // Se a senha estiver incorreta ou o usuário não for encontrado
         if (signInError.message.includes("Invalid login credentials") || signInError.message.includes("User not found")) {
-          const { error: signUpError } = await supabase.auth.signUp({
-            email: conta.email,
-            password: senhaPadrao,
-            options: {
-              data: {
-                nome: conta.nome,
-                perfil: conta.perfil,
-                telefone: conta.telefone,
-                documento_identificacao: conta.documento,
-                primeiro_acesso_pendente: false // contas mockadas estáticas já iniciam ativas
-              }
-            }
-          })
-
-          if (signUpError) throw signUpError
-
-          // Realiza login após cadastrar com sucesso
-          const { error: retryError } = await supabase.auth.signInWithPassword({
-            email: conta.email,
-            password: senhaPadrao
-          })
-
-          if (retryError) throw retryError
           
-          setAlert({
-            type: "success",
-            message: `Conta de ${conta.nome} criada e logada com sucesso!`
-          })
+          // 2. Verifica se o usuário já existe na tabela de perfis para resgatar o ID dele
+          const { data: perfilData } = await supabase
+            .from("perfis")
+            .select("id")
+            .eq("email", conta.email)
+            .maybeSingle()
+
+          if (perfilData?.id) {
+            // Se já existe, redefinimos a senha dele administrativamente via Edge Function para a senha padrão de teste
+            const { data: edgeData, error: edgeError } = await supabase.functions.invoke("admin-helper", {
+              body: {
+                action: "simular-primeiro-acesso",
+                userId: perfilData.id,
+                password: senhaPadrao
+              }
+            })
+
+            if (edgeError || (edgeData && edgeData.error)) {
+              throw new Error(edgeError?.message || edgeData?.error || "Erro ao resincronizar a senha da conta de teste.")
+            }
+
+            // Tenta logar novamente com a nova senha sincronizada
+            const { error: retryError } = await supabase.auth.signInWithPassword({
+              email: conta.email,
+              password: senhaPadrao
+            })
+            if (retryError) throw retryError
+
+            setAlert({
+              type: "success",
+              message: `A senha de ${conta.nome} foi sincronizada para "${senhaPadrao}" e o login foi realizado com sucesso!`
+            })
+          } else {
+            // Se não existe, cria a conta no auth.users via signUp
+            const { error: signUpError } = await supabase.auth.signUp({
+              email: conta.email,
+              password: senhaPadrao,
+              options: {
+                data: {
+                  nome: conta.nome,
+                  perfil: conta.perfil,
+                  telefone: conta.telefone,
+                  documento_identificacao: conta.documento,
+                  primeiro_acesso_pendente: false // contas mockadas estáticas já iniciam ativas
+                }
+              }
+            })
+
+            if (signUpError) throw signUpError
+
+            // Efetua o login após criar
+            const { error: retryError } = await supabase.auth.signInWithPassword({
+              email: conta.email,
+              password: senhaPadrao
+            })
+            if (retryError) throw retryError
+            
+            setAlert({
+              type: "success",
+              message: `Conta de ${conta.nome} criada e logada com sucesso!`
+            })
+          }
         } else {
           throw signInError
         }
