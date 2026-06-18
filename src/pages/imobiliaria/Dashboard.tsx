@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Wrench, ShieldAlert, Clock, CheckSquare, RefreshCw, Filter, 
-  AlertCircle, FileText, User, HelpCircle, Loader2 
+  AlertCircle, FileText, User, HelpCircle, Loader2, Hammer, CheckCircle2
 } from "lucide-react"
 
 // Interfaces de tipos mapeados
@@ -82,11 +82,12 @@ export default function Dashboard() {
   const [observacaoHistorico, setObservacaoHistorico] = useState("")
   const [salvandoAcao, setSalvandoAcao] = useState(false)
 
-  // Estados para galeria de mídias e zoom de imagem
+  // Estados para galeria de mídias, zoom de imagem e orçamento ativo
   const [midias, setMidias] = useState<{ id: string; url_storage: string; tipo_midia: string }[]>([])
   const [urlImagemZoom, setUrlImagemZoom] = useState<string | null>(null)
+  const [orcamentoAtivo, setOrcamentoAtivo] = useState<any | null>(null)
 
-  // Sincroniza mídias sempre que o chamado ativo mudar
+  // Sincroniza mídias e orçamento sempre que o chamado ativo mudar
   useEffect(() => {
     if (chamadoAtivo) {
       supabase
@@ -100,8 +101,27 @@ export default function Dashboard() {
             setMidias(data || [])
           }
         })
+
+      supabase
+        .from("orcamentos")
+        .select(`
+          *,
+          prestador:prestador_id (nome)
+        `)
+        .eq("chamado_id", chamadoAtivo.id)
+        .order("criado_em", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error) {
+            console.error("Erro ao buscar orçamento do chamado:", error)
+          } else {
+            setOrcamentoAtivo(data || null)
+          }
+        })
     } else {
       setMidias([])
+      setOrcamentoAtivo(null)
     }
   }, [chamadoAtivo])
 
@@ -178,6 +198,128 @@ export default function Dashboard() {
       }
     }
   }, [user, perfil])
+
+  // Aprova o orçamento diretamente se estiver dentro do limite de alçada
+  const handleAprovarOrcamentoDireto = async () => {
+    if (!chamadoAtivo || !orcamentoAtivo) return
+    setSalvandoAcao(true)
+    setErro(null)
+
+    try {
+      // 1. Atualiza o orçamento como autorizado pela imobiliária
+      const { error: orcamentoError } = await supabase
+        .from("orcamentos")
+        .update({ autorizado_pela_imobiliaria: true })
+        .eq("id", orcamentoAtivo.id)
+
+      if (orcamentoError) throw orcamentoError
+
+      // 2. Atualiza o chamado para aguardando_autorizacao
+      const { error: chamadoError } = await supabase
+        .from("chamados")
+        .update({ status: "aguardando_autorizacao" })
+        .eq("id", chamadoAtivo.id)
+
+      if (chamadoError) throw chamadoError
+
+      // 3. Registra a ação no histórico
+      const { error: historicoError } = await supabase
+        .from("historico_chamados")
+        .insert({
+          chamado_id: chamadoAtivo.id,
+          usuario_id: user?.id,
+          status_anterior: chamadoAtivo.status,
+          novo_status: "aguardando_autorizacao",
+          observacao: `Orçamento de R$ ${Number(orcamentoAtivo.valor_total_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} aprovado diretamente pela imobiliária (dentro do limite).`
+        })
+
+      if (historicoError) throw historicoError
+
+      setChamadoAtivo(null)
+      await loadChamados()
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro ao aprovar orçamento diretamente.")
+    } finally {
+      setSalvandoAcao(false)
+    }
+  }
+
+  // Encaminha o orçamento para avaliação do proprietário (excede o limite)
+  const handleEncaminharProprietario = async () => {
+    if (!chamadoAtivo || !orcamentoAtivo) return
+    setSalvandoAcao(true)
+    setErro(null)
+
+    try {
+      // 1. Atualiza o chamado para analise_proprietario
+      const { error: chamadoError } = await supabase
+        .from("chamados")
+        .update({ status: "analise_proprietario" })
+        .eq("id", chamadoAtivo.id)
+
+      if (chamadoError) throw chamadoError
+
+      // 2. Registra no histórico de auditoria
+      const { error: historicoError } = await supabase
+        .from("historico_chamados")
+        .insert({
+          chamado_id: chamadoAtivo.id,
+          usuario_id: user?.id,
+          status_anterior: chamadoAtivo.status,
+          novo_status: "analise_proprietario",
+          observacao: `Orçamento de R$ ${Number(orcamentoAtivo.valor_total_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} excede alçada de R$ ${Number(chamadoAtivo.imovel.limite_alcada_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}. Encaminhado ao Proprietário.`
+        })
+
+      if (historicoError) throw historicoError
+
+      setChamadoAtivo(null)
+      await loadChamados()
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro ao encaminhar ao proprietário.")
+    } finally {
+      setSalvandoAcao(false)
+    }
+  }
+
+  // Autoriza a execução técnica final da OS (status aguardando_autorizacao)
+  const handleAutorizarExecucao = async () => {
+    if (!chamadoAtivo) return
+    setSalvandoAcao(true)
+    setErro(null)
+
+    try {
+      // 1. Atualiza o chamado para os_liberada
+      const { error: chamadoError } = await supabase
+        .from("chamados")
+        .update({ status: "os_liberada" })
+        .eq("id", chamadoAtivo.id)
+
+      if (chamadoError) throw chamadoError
+
+      // 2. Registra no histórico de auditoria
+      const { error: historicoError } = await supabase
+        .from("historico_chamados")
+        .insert({
+          chamado_id: chamadoAtivo.id,
+          usuario_id: user?.id,
+          status_anterior: chamadoAtivo.status,
+          novo_status: "os_liberada",
+          observacao: `Execução autorizada pela Imobiliária. Ordem de Serviço (O.S.) liberada para execução técnica.`
+        })
+
+      if (historicoError) throw historicoError
+
+      setChamadoAtivo(null)
+      await loadChamados()
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro ao autorizar execução.")
+    } finally {
+      setSalvandoAcao(false)
+    }
+  }
 
   // Processa as atualizações de status ou responsabilidade de um chamado
   const handleAplicarAcao = async (e: React.FormEvent) => {
@@ -453,76 +595,177 @@ export default function Dashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-5">
-                <form onSubmit={handleAplicarAcao} className="space-y-5">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                      Chamado Selecionado
-                    </label>
-                    <div className="p-3 bg-slate-50 rounded border border-slate-200/50">
-                      <div className="text-xs font-bold text-occasio-navy font-mono">ID: {chamadoAtivo.id.slice(0,8)}...</div>
-                      <div className="text-sm font-extrabold text-slate-800 line-clamp-1 mt-0.5">{chamadoAtivo.titulo}</div>
-                      <div className="text-xs text-slate-400 mt-1 flex justify-between">
-                        <span>Alçada Imóvel:</span>
-                        <strong className="text-slate-600">
-                          {chamadoAtivo.imovel.limite_alcada_r$.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                {/* Se for orcamento_recebido e tiver orçamento ativo, exibe inteligência de alçada */}
+                {chamadoAtivo.status === "orcamento_recebido" && orcamentoAtivo ? (
+                  <div className="space-y-4 pt-1">
+                    <div className="bg-slate-50 p-3 rounded border border-slate-200/50 text-xs space-y-1">
+                      <div className="font-bold text-slate-700 flex items-center gap-1">
+                        <Hammer className="h-3.5 w-3.5 text-occasio-blue" />
+                        Dados da Cotação
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        Prestador: <strong className="text-slate-700">{orcamentoAtivo.prestador?.nome || "Técnico"}</strong>
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        Mão de Obra: <strong className="text-slate-700">R$ {Number(orcamentoAtivo.valor_servico_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        Materiais: <strong className="text-slate-700">R$ {Number(orcamentoAtivo.valor_materiais_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
+                      </div>
+                      <div className="flex justify-between items-center pt-1.5 mt-1 border-t border-dashed border-slate-200">
+                        <span className="font-bold text-slate-800">Custo Total:</span>
+                        <strong className="text-occasio-blue text-sm font-extrabold">
+                          R$ {Number(orcamentoAtivo.valor_total_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                         </strong>
                       </div>
+                      <div className="text-[11px] text-slate-500 pt-0.5">
+                        Prazo: <strong className="text-slate-700">{orcamentoAtivo.prazo_execucao_dias} dias</strong>
+                      </div>
+                      {orcamentoAtivo.observacoes_tecnicas && (
+                        <div className="text-[10px] text-slate-400 italic pt-1 mt-1 border-t border-slate-100">
+                          &ldquo;{orcamentoAtivo.observacoes_tecnicas}&rdquo;
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Alerta de Alçada comparando custo com limite do imóvel */}
+                    {Number(orcamentoAtivo.valor_total_r$) <= chamadoAtivo.imovel.limite_alcada_r$ ? (
+                      <div className="bg-green-50 border border-green-200 text-green-800 p-3 rounded text-xs space-y-1">
+                        <div className="font-bold flex items-center gap-1">
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          Orçamento dentro da Alçada
+                        </div>
+                        <p className="text-[11px] leading-relaxed">
+                          O valor total de R$ {Number(orcamentoAtivo.valor_total_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} está dentro da alçada máxima de aprovação direta da imobiliária (R$ {Number(chamadoAtivo.imovel.limite_alcada_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}).
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-red-50 border border-red-200 text-red-800 p-3 rounded text-xs space-y-1">
+                        <div className="font-bold flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4 text-red-600" />
+                          Excede Limite de Alçada
+                        </div>
+                        <p className="text-[11px] leading-relaxed">
+                          O valor total de R$ {Number(orcamentoAtivo.valor_total_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} excede o limite máximo para aprovação direta pela imobiliária (R$ {Number(chamadoAtivo.imovel.limite_alcada_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}).
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="pt-2">
+                      {Number(orcamentoAtivo.valor_total_r$) <= chamadoAtivo.imovel.limite_alcada_r$ ? (
+                        <Button
+                          type="button"
+                          disabled={salvandoAcao}
+                          onClick={handleAprovarOrcamentoDireto}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-bold h-9 flex items-center gap-1 justify-center"
+                        >
+                          {salvandoAcao ? "Processando..." : <><CheckCircle2 className="h-4 w-4" /> Aprovar Orçamento (Direto)</>}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          disabled={salvandoAcao}
+                          onClick={handleEncaminharProprietario}
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold h-9 flex items-center gap-1 justify-center"
+                        >
+                          {salvandoAcao ? "Processando..." : <><User className="h-4 w-4" /> Encaminhar ao Proprietário</>}
+                        </Button>
+                      )}
                     </div>
                   </div>
+                ) : chamadoAtivo.status === "aguardando_autorizacao" ? (
+                  <div className="space-y-4 pt-1">
+                    <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded text-xs space-y-1.5">
+                      <div className="font-bold flex items-center gap-1">
+                        <CheckCircle2 className="h-4 w-4 text-amber-600" />
+                        Orçamento Aprovado
+                      </div>
+                      <p className="text-[11px] leading-relaxed">
+                        O orçamento foi autorizado e está aguardando liberação de início. Clique no botão abaixo para gerar a Ordem de Serviço (O.S.) e notificar o técnico parceiro.
+                      </p>
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                      Novo Status *
-                    </label>
-                    <select
-                      value={novoStatus}
-                      onChange={(e) => setNovoStatus(e.target.value as StatusChamado)}
-                      required
-                      className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                    <Button
+                      type="button"
+                      disabled={salvandoAcao}
+                      onClick={handleAutorizarExecucao}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-bold h-10 flex items-center gap-1.5 justify-center shadow"
                     >
-                      {Object.entries(STATUS_CONFIG).map(([key, val]) => (
-                        <option key={key} value={key}>{val.label}</option>
-                      ))}
-                    </select>
+                      {salvandoAcao ? "Autorizando..." : <>✅ Autorizar Execução do Serviço</>}
+                    </Button>
                   </div>
+                ) : (
+                  <form onSubmit={handleAplicarAcao} className="space-y-5">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                        Chamado Selecionado
+                      </label>
+                      <div className="p-3 bg-slate-50 rounded border border-slate-200/50">
+                        <div className="text-xs font-bold text-occasio-navy font-mono">ID: {chamadoAtivo.id.slice(0,8)}...</div>
+                        <div className="text-sm font-extrabold text-slate-800 line-clamp-1 mt-0.5">{chamadoAtivo.titulo}</div>
+                        <div className="text-xs text-slate-400 mt-1 flex justify-between">
+                          <span>Alçada Imóvel:</span>
+                          <strong className="text-slate-600">
+                            {chamadoAtivo.imovel.limite_alcada_r$.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                      Responsabilidade Financeira *
-                    </label>
-                    <select
-                      value={novaResponsabilidade}
-                      onChange={(e) => setNovaResponsabilidade(e.target.value as Responsabilidade)}
-                      required
-                      className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                        Novo Status *
+                      </label>
+                      <select
+                        value={novoStatus}
+                        onChange={(e) => setNovoStatus(e.target.value as StatusChamado)}
+                        required
+                        className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                      >
+                        {Object.entries(STATUS_CONFIG).map(([key, val]) => (
+                          <option key={key} value={key}>{val.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                        Responsabilidade Financeira *
+                      </label>
+                      <select
+                        value={novaResponsabilidade}
+                        onChange={(e) => setNovaResponsabilidade(e.target.value as Responsabilidade)}
+                        required
+                        className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                      >
+                        <option value="indefinido">Indefinido (Em Análise)</option>
+                        <option value="proprietario">Proprietário (Depreciação Estrutural)</option>
+                        <option value="inquilino">Inquilino (Uso Inadequado/Mau Uso)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                        Observação de Histórico (Auditoria)
+                      </label>
+                      <textarea
+                        rows={3}
+                        placeholder="Ex: Chamado verificado. Enviando ao prestador para cotar serviço hidráulico."
+                        value={observacaoHistorico}
+                        onChange={(e) => setObservacaoHistorico(e.target.value)}
+                        className="w-full border border-slate-200 rounded-md p-2 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue resize-none"
+                      />
+                    </div>
+
+                    <Button 
+                      disabled={salvandoAcao} 
+                      type="submit" 
+                      className="w-full bg-occasio-blue hover:bg-occasio-navy text-white text-xs font-semibold h-9"
                     >
-                      <option value="indefinido">Indefinido (Em Análise)</option>
-                      <option value="proprietario">Proprietário (Depreciação Estrutural)</option>
-                      <option value="inquilino">Inquilino (Uso Inadequado/Mau Uso)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                      Observação de Histórico (Auditoria)
-                    </label>
-                    <textarea
-                      rows={3}
-                      placeholder="Ex: Chamado verificado. Enviando ao prestador para cotar serviço hidráulico."
-                      value={observacaoHistorico}
-                      onChange={(e) => setObservacaoHistorico(e.target.value)}
-                      className="w-full border border-slate-200 rounded-md p-2 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue resize-none"
-                    />
-                  </div>
-
-                  <Button 
-                    disabled={salvandoAcao} 
-                    type="submit" 
-                    className="w-full bg-occasio-blue hover:bg-occasio-navy text-white text-xs font-semibold h-9"
-                  >
-                    {salvandoAcao ? "Salvando..." : "Salvar e Atualizar Chamado"}
-                  </Button>
-                </form>
+                      {salvandoAcao ? "Salvando..." : "Salvar e Atualizar Chamado"}
+                    </Button>
+                  </form>
+                )}
 
                 {/* Exibição de Fotos Vistoria Técnica com Zoom */}
                 {midias.length > 0 && (

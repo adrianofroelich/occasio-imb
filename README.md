@@ -86,6 +86,8 @@ occasio-imb/
 │   │   │   └── Dashboard.tsx # Painel realtime e abertura de chamado do inquilino (Fase 4)
 │   │   ├── prestador/
 │   │   │   └── Dashboard.tsx # Painel mobile-first de propostas e OS ativas do técnico (Fase 5)
+│   │   ├── proprietario/
+│   │   │   └── Dashboard.tsx # Painel de aprovações de orçamentos e histórico do proprietário (Fase 6)
 │   │   ├── Beneficios.tsx  # Página detalhada de ROI e Gestão Patrimonial
 │   │   ├── Home.tsx        # Landing Page institucional da plataforma
 │   │   └── LoginTeste.tsx  # Simulador de autenticação para testes rápidos RLS
