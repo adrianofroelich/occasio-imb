@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from "re
 import Home from "./pages/Home"
 import Beneficios from "./pages/Beneficios"
 import { Button } from "@/components/ui/button"
+import { AuthProvider } from "./hooks/useAuth"
 
 // Componente auxiliar para tratar rolagem suave de âncoras (hash)
 // e garantir que a página role para o topo ao alternar de rota
@@ -120,9 +121,11 @@ function MainLayout() {
 // Componente Root com Router configurado
 export default function App() {
   return (
-    <BrowserRouter>
-      <ScrollToHash />
-      <MainLayout />
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <ScrollToHash />
+        <MainLayout />
+      </BrowserRouter>
+    </AuthProvider>
   )
 }
