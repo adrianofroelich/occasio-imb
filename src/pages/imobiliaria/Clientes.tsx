@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { supabase, supabaseAdmin } from "@/lib/supabase"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
@@ -127,23 +127,24 @@ export default function Clientes() {
     try {
       setSaving(true)
 
-      // 1. Cria o usuário via API de administração do Supabase (supabaseAdmin)
-      // Definimos senha inicial provisória e forçamos email_confirm para true.
-      // Passamos metadados para que a trigger handle_new_user capture tudo.
       const senhaProvisoria = `Occasio@${Math.random().toString(36).substring(2, 10).toUpperCase()}`
-      
-      const { error } = await supabaseAdmin.auth.admin.createUser({
-        email: email.trim().toLowerCase(),
-        email_confirm: true,
-        password: senhaProvisoria,
-        user_metadata: {
+
+      // 1. Cria o usuário invocando a Edge Function 'admin-helper'
+      const { data, error } = await supabase.functions.invoke("admin-helper", {
+        body: {
+          action: "criar-cliente",
+          email: email.trim().toLowerCase(),
+          password: senhaProvisoria,
           nome: nome.trim(),
           perfil: tipoPerfil,
           telefone: telefone.replace(/\D/g, "") ? telefone : null,
-          documento_identificacao: documento.replace(/\D/g, "") ? documento : null,
-          primeiro_acesso_pendente: true
+          documento: documento.replace(/\D/g, "") ? documento : null
         }
       })
+
+      if (error || (data && data.error)) {
+        throw new Error(error?.message || data?.error || "Erro ao cadastrar o cliente na base administrativa.")
+      }
 
       if (error) {
         throw error

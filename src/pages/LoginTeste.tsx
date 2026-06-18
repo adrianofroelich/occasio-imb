@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { supabase, supabaseAdmin } from "@/lib/supabase"
+import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -184,20 +184,17 @@ export default function LoginTeste() {
 
     try {
       if (usuario.primeiro_acesso_pendente) {
-        // Simulação de Primeiro Acesso:
-        // 1. Redefine a senha para a padrão usando a Admin API (supabaseAdmin)
-        const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
-          usuario.id,
-          { password: senhaPadrao }
-        )
-        if (updateAuthError) throw updateAuthError
-
-        // 2. Atualiza a flag na tabela public.perfis
-        const { error: updatePerfilError } = await supabase
-          .from("perfis")
-          .update({ primeiro_acesso_pendente: false })
-          .eq("id", usuario.id)
-        if (updatePerfilError) throw updatePerfilError
+        // Simulação de Primeiro Acesso usando a Edge Function 'admin-helper':
+        const { data: edgeData, error: edgeError } = await supabase.functions.invoke("admin-helper", {
+          body: {
+            action: "simular-primeiro-acesso",
+            userId: usuario.id,
+            password: senhaPadrao
+          }
+        })
+        if (edgeError || (edgeData && edgeData.error)) {
+          throw new Error(edgeError?.message || edgeData?.error || "Erro ao atualizar a senha administrativamente.")
+        }
 
         // 3. Faz login normal
         const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -220,11 +217,16 @@ export default function LoginTeste() {
         if (signInError) {
           // Fallback se a senha não estiver sincronizada: redefinimos administrativamente e logamos
           if (signInError.message.includes("Invalid login credentials") || signInError.message.includes("User not found")) {
-            const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
-              usuario.id,
-              { password: senhaPadrao }
-            )
-            if (updateAuthError) throw updateAuthError
+            const { data: edgeData, error: edgeError } = await supabase.functions.invoke("admin-helper", {
+              body: {
+                action: "simular-primeiro-acesso",
+                userId: usuario.id,
+                password: senhaPadrao
+              }
+            })
+            if (edgeError || (edgeData && edgeData.error)) {
+              throw new Error(edgeError?.message || edgeData?.error || "Erro ao atualizar a senha administrativamente.")
+            }
 
             const { error: retryError } = await supabase.auth.signInWithPassword({
               email: usuario.email,
