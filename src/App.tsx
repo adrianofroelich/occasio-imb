@@ -21,11 +21,11 @@ export default function App() {
             <a href="#benefits" className="hover:text-occasio-blue transition-colors">Benefícios</a>
             <a href="#how-it-works" className="hover:text-occasio-blue transition-colors">Como Funciona</a>
           </nav>
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" className="hidden md:inline-flex text-occasio-navy hover:text-occasio-blue">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Button variant="ghost" className="text-occasio-navy hover:text-occasio-blue text-sm md:text-base px-2 md:px-4">
               Login
             </Button>
-            <Button className="bg-occasio-blue hover:bg-occasio-navy text-white shadow-lg shadow-occasio-blue/20 transition-all">
+            <Button className="bg-occasio-blue hover:bg-occasio-navy text-white shadow-lg shadow-occasio-blue/20 transition-all text-xs sm:text-sm px-3 sm:px-4">
               Agendar Demo
             </Button>
           </div>
