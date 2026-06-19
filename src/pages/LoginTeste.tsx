@@ -79,6 +79,8 @@ interface UsuarioDinamico {
   primeiro_acesso_pendente: boolean
   telefone: string | null
   documento_identificacao: string | null
+  empresa_mae_id?: string | null
+  categorias?: string[] | null
 }
 
 export default function LoginTeste() {
@@ -93,7 +95,7 @@ export default function LoginTeste() {
       const emailsMocks = CONTAS_TESTE.map(c => c.email)
       const { data, error } = await supabase
         .from("perfis")
-        .select("id, nome, email, perfil, primeiro_acesso_pendente, telefone, documento_identificacao")
+        .select("id, nome, email, perfil, primeiro_acesso_pendente, telefone, documento_identificacao, empresa_mae_id, categorias")
         .order("criado_em", { ascending: false })
 
       if (error) throw error
@@ -434,21 +436,42 @@ export default function LoginTeste() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {usuariosDinamicos.map((usuario) => {
               const isAtivo = user?.id === usuario.id
-              const Icone = usuario.perfil === "inquilino" ? UserCheck : User
-              const corBadge = usuario.perfil === "inquilino" 
-                ? "bg-sky-50 text-sky-700 border-sky-200" 
-                : "bg-amber-50 text-amber-700 border-amber-200"
+              
+              const Icone = 
+                usuario.perfil === "inquilino" ? UserCheck :
+                usuario.perfil === "proprietario" ? User :
+                usuario.perfil === "prestador" ? HardHat : Landmark
+
+              const corBadge = 
+                usuario.perfil === "inquilino" ? "bg-sky-50 text-sky-700 border-sky-200" :
+                usuario.perfil === "proprietario" ? "bg-indigo-50 text-indigo-700 border-indigo-200" :
+                usuario.perfil === "prestador" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                "bg-blue-50 text-blue-700 border-blue-200"
+
+              const labelPerfil = 
+                usuario.perfil === "inquilino" ? "Inquilino" :
+                usuario.perfil === "proprietario" ? "Proprietário" :
+                usuario.perfil === "imobiliaria" ? "Imobiliária" :
+                usuario.empresa_mae_id ? "Técnico Vinculado" : "Empresa Prestadora (PJ)"
 
               return (
                 <Card key={usuario.id} className={`flex flex-col border transition-all duration-300 hover:shadow-lg ${isAtivo ? "ring-2 ring-occasio-blue border-occasio-blue" : "border-slate-200"}`}>
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-1.5">
-                        <div className={`p-1 rounded ${usuario.perfil === "inquilino" ? "bg-sky-50" : "bg-amber-50"}`}>
-                          <Icone className={`h-3.5 w-3.5 ${usuario.perfil === "inquilino" ? "text-sky-600" : "text-amber-600"}`} />
+                        <div className={`p-1 rounded ${
+                          usuario.perfil === "inquilino" ? "bg-sky-50" : 
+                          usuario.perfil === "proprietario" ? "bg-indigo-50" :
+                          usuario.perfil === "prestador" ? "bg-amber-50" : "bg-blue-50"
+                        }`}>
+                          <Icone className={`h-3.5 w-3.5 ${
+                            usuario.perfil === "inquilino" ? "text-sky-600" : 
+                            usuario.perfil === "proprietario" ? "text-indigo-600" :
+                            usuario.perfil === "prestador" ? "text-amber-600" : "text-blue-600"
+                          }`} />
                         </div>
                         <Badge variant="outline" className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${corBadge}`}>
-                          {usuario.perfil === "inquilino" ? "Inquilino" : "Proprietário"}
+                          {labelPerfil}
                         </Badge>
                       </div>
                       {usuario.primeiro_acesso_pendente ? (
@@ -468,6 +491,9 @@ export default function LoginTeste() {
                     <div className="text-xs text-slate-500 space-y-1">
                       {usuario.telefone && <p><strong>Tel:</strong> {usuario.telefone}</p>}
                       {usuario.documento_identificacao && <p><strong>Doc:</strong> {usuario.documento_identificacao}</p>}
+                      {usuario.categorias && usuario.categorias.length > 0 && (
+                        <p className="truncate"><strong>Espec:</strong> {usuario.categorias.join(", ")}</p>
+                      )}
                     </div>
                     
                     <Button

@@ -14,6 +14,8 @@ export interface Perfil {
   perfil: TipoPerfil
   documento_identificacao: string | null
   primeiro_acesso_pendente?: boolean
+  empresa_mae_id?: string | null
+  categorias?: string[] | null
   criado_em: string
   atualizado_em: string
 }

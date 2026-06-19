@@ -17,7 +17,7 @@ export default {
       const { action, ...body } = await req.json();
 
       if (action === "criar-cliente") {
-        const { email, password, nome, perfil, telefone, documento } = body;
+        const { email, password, nome, perfil, telefone, documento, empresa_mae_id, categorias } = body;
 
         const { data, error } = await ctx.supabaseAdmin.auth.admin.createUser({
           email: email.trim().toLowerCase(),
@@ -28,7 +28,9 @@ export default {
             perfil: perfil,
             telefone: telefone || null,
             documento_identificacao: documento || null,
-            primeiro_acesso_pendente: true
+            primeiro_acesso_pendente: true,
+            empresa_mae_id: empresa_mae_id || null,
+            categorias: categorias || null
           }
         });
 

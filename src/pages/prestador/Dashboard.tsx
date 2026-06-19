@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
-  Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, Hammer, AlertCircle
+  Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, Hammer, AlertCircle,
+  User, UserCheck, FileText, ChevronRight
 } from "lucide-react"
 
 // Tipagens locais
@@ -27,6 +28,8 @@ interface Chamado {
   criado_em: string
   imovel_id: string
   inquilino_id: string
+  empresa_prestadora_id?: string | null
+  tecnico_id?: string | null
   imovel: {
     codigo_imovel: string
     endereco: string
@@ -35,6 +38,19 @@ interface Chamado {
   inquilino: {
     nome: string
   }
+  tecnico?: {
+    id: string
+    nome: string
+  } | null
+  orcamentos?: {
+    id: string
+    valor_servico_r$: number
+    valor_materiais_r$: number
+    prazo_execucao_dias: number
+    observacoes_tecnicas: string
+    homologado_pela_empresa: boolean
+    prestador_id: string
+  }[]
 }
 
 // Funções auxiliares para formatação de moeda brasileira (pt-BR)
@@ -65,6 +81,9 @@ export default function PrestadorDashboard() {
   const [chamadosPendentes, setChamadosPendentes] = useState<Chamado[]>([])
   const [osAtivas, setOsAtivas] = useState<Chamado[]>([])
   
+  // Lista de técnicos da equipe (Empresa PJ)
+  const [tecnicosDisponiveis, setTecnicosDisponiveis] = useState<{ id: string; nome: string }[]>([])
+  
   // Loading e alertas
   const [loading, setLoading] = useState(true)
   const [realtimeLoading, setRealtimeLoading] = useState(false)
@@ -72,70 +91,141 @@ export default function PrestadorDashboard() {
   const [erro, setErro] = useState<string | null>(null)
   const [sucesso, setSucesso] = useState<string | null>(null)
 
-  // Formulário de Cotação
+  // Técnico: Formulário de Cotação de Campo
   const [chamadoCotando, setChamadoCotando] = useState<Chamado | null>(null)
   const [valorServico, setValorServico] = useState("")
   const [valorMateriais, setValorMateriais] = useState("")
   const [prazo, setPrazo] = useState("")
   const [observacoes, setObservacoes] = useState("")
 
-  // Formulário de Conclusão de OS
+  // Empresa PJ: Estados para Delegação
+  const [chamadoDelegando, setChamadoDelegando] = useState<Chamado | null>(null)
+  const [tecnicoSelecionadoId, setTecnicoSelecionadoId] = useState("")
+
+  // Empresa PJ: Estados para Homologação
+  const [chamadoHomologando, setChamadoHomologando] = useState<Chamado | null>(null)
+  const [orcamentoHomologando, setOrcamentoHomologando] = useState<any>(null)
+  const [homologarValorServico, setHomologarValorServico] = useState("")
+  const [homologarValorMateriais, setHomologarValorMateriais] = useState("")
+  const [homologarPrazo, setHomologarPrazo] = useState("")
+  const [homologarObservacoes, setHomologarObservacoes] = useState("")
+
+  // Técnico: Formulário de Conclusão de OS
   const [chamadoConcluindo, setChamadoConcluindo] = useState<Chamado | null>(null)
   const [relatorio, setRelatorio] = useState("")
   const [imagemDepois, setImagemDepois] = useState<File | null>(null)
   const [imagemPreview, setImagemPreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Carrega listagens do prestador
+  // Verifica se é perfil de Técnico (pertence a uma Empresa Mãe) ou Empresa PJ (é conta-mãe)
+  const ehTecnico = !!perfil?.empresa_mae_id
+
+  // Carrega listagens do prestador/empresa
   const loadPrestadorData = async (silencioso = false) => {
     if (!silencioso) setLoading(true)
     else setRealtimeLoading(true)
     setErro(null)
 
     try {
-      // 1. Carrega chamados aguardando orçamento no status 'aguardando_orcamento'
-      // E garante que este prestador ainda NÃO tenha enviado orçamento para este chamado
-      const { data: orcamentosJaEnviados } = await supabase
-        .from("orcamentos")
-        .select("chamado_id")
-        .eq("prestador_id", user?.id)
+      if (ehTecnico) {
+        // ================= FLUXO TÉCNICO VINCULADO =================
+        // 1. Busca chamados delegados ao técnico específico em status 'aguardando_orcamento'
+        // Excluindo os chamados para os quais ele já tenha cadastrado um orçamento preliminar
+        const { data: orcamentosJaEnviados } = await supabase
+          .from("orcamentos")
+          .select("chamado_id")
+          .eq("prestador_id", user?.id)
 
-      const idsJaCotados = orcamentosJaEnviados?.map(item => item.chamado_id) || []
+        const idsJaCotados = orcamentosJaEnviados?.map(item => item.chamado_id) || []
 
-      let queryPendentes = supabase
-        .from("chamados")
-        .select(`
-          *,
-          imovel:imovel_id (codigo_imovel, endereco, bairro),
-          inquilino:inquilino_id (nome)
-        `)
-        .eq("status", "aguardando_orcamento")
-        .order("criado_em", { ascending: false })
+        let queryPendentes = supabase
+          .from("chamados")
+          .select(`
+            *,
+            imovel:imovel_id (codigo_imovel, endereco, bairro),
+            inquilino:inquilino_id (nome)
+          `)
+          .eq("tecnico_id", user?.id)
+          .eq("status", "aguardando_orcamento")
+          .order("criado_em", { ascending: false })
 
-      if (idsJaCotados.length > 0) {
-        queryPendentes = queryPendentes.not("id", "in", `(${idsJaCotados.join(",")})`)
+        if (idsJaCotados.length > 0) {
+          queryPendentes = queryPendentes.not("id", "in", `(${idsJaCotados.join(",")})`)
+        }
+
+        const { data: pendentesData, error: pendentesError } = await queryPendentes
+        if (pendentesError) throw pendentesError
+        setChamadosPendentes(pendentesData as unknown as Chamado[] || [])
+
+        // 2. Busca OS Ativas delegadas ao técnico ('os_liberada' ou 'em_execucao')
+        const { data: osData, error: osError } = await supabase
+          .from("chamados")
+          .select(`
+            *,
+            imovel:imovel_id (codigo_imovel, endereco, bairro),
+            inquilino:inquilino_id (nome)
+          `)
+          .eq("tecnico_id", user?.id)
+          .in("status", ["os_liberada", "em_execucao"])
+          .order("criado_em", { ascending: false })
+
+        if (osError) throw osError
+        setOsAtivas(osData as unknown as Chamado[] || [])
+
+      } else {
+        // ================= FLUXO EMPRESA PRESTADORA PJ =================
+        // 1. Busca todos os chamados enviados à empresa prestadora PJ em status 'aguardando_orcamento'
+        // Trazendo técnicos e orçamentos associados para saber se necessita delegar ou homologar
+        const { data: pendentesData, error: pendentesError } = await supabase
+          .from("chamados")
+          .select(`
+            *,
+            imovel:imovel_id (codigo_imovel, endereco, bairro),
+            inquilino:inquilino_id (nome),
+            tecnico:tecnico_id (id, nome),
+            orcamentos (
+              id,
+              valor_servico_r$,
+              valor_materiais_r$,
+              prazo_execucao_dias,
+              observacoes_tecnicas,
+              homologado_pela_empresa,
+              prestador_id
+            )
+          `)
+          .eq("empresa_prestadora_id", user?.id)
+          .eq("status", "aguardando_orcamento")
+          .order("criado_em", { ascending: false })
+
+        if (pendentesError) throw pendentesError
+        setChamadosPendentes(pendentesData as unknown as Chamado[] || [])
+
+        // 2. Busca todas as OS ativas de toda a sua equipe técnica
+        const { data: osData, error: osError } = await supabase
+          .from("chamados")
+          .select(`
+            *,
+            imovel:imovel_id (codigo_imovel, endereco, bairro),
+            inquilino:inquilino_id (nome),
+            tecnico:tecnico_id (id, nome)
+          `)
+          .eq("empresa_prestadora_id", user?.id)
+          .in("status", ["os_liberada", "em_execucao"])
+          .order("criado_em", { ascending: false })
+
+        if (osError) throw osError
+        setOsAtivas(osData as unknown as Chamado[] || [])
+
+        // 3. Busca lista de técnicos vinculados à empresa
+        const { data: tecData, error: tecError } = await supabase
+          .from("perfis")
+          .select("id, nome")
+          .eq("empresa_mae_id", user?.id)
+          .order("nome")
+
+        if (tecError) throw tecError
+        setTecnicosDisponiveis(tecData || [])
       }
-
-      const { data: pendentesData, error: pendentesError } = await queryPendentes
-      if (pendentesError) throw pendentesError
-      setChamadosPendentes(pendentesData as unknown as Chamado[] || [])
-
-      // 2. Carrega Ordens de Serviço Ativas (status 'os_liberada' ou 'em_execucao')
-      // que estejam vinculadas a um orçamento deste prestador de serviço
-      const { data: osData, error: osError } = await supabase
-        .from("chamados")
-        .select(`
-          *,
-          imovel:imovel_id (codigo_imovel, endereco, bairro),
-          inquilino:inquilino_id (nome),
-          orcamentos!inner (prestador_id)
-        `)
-        .eq("orcamentos.prestador_id", user?.id)
-        .in("status", ["os_liberada", "em_execucao"])
-        .order("criado_em", { ascending: false })
-
-      if (osError) throw osError
-      setOsAtivas(osData as unknown as Chamado[] || [])
 
     } catch (err: any) {
       console.error(err)
@@ -170,10 +260,10 @@ export default function PrestadorDashboard() {
         supabase.removeChannel(channel)
       }
     }
-  }, [user, perfil])
+  }, [user, perfil, ehTecnico])
 
-  // Trata envio da proposta de orçamento
-  const handleEnviarOrcamento = async (e: React.FormEvent) => {
+  // Técnico: Envia orçamento preliminar para a Empresa homologar
+  const handleEnviarOrcamentoTecnico = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!chamadoCotando) return
     setSalvando(true)
@@ -190,7 +280,7 @@ export default function PrestadorDashboard() {
     }
 
     try {
-      // 1. Cria o registro na tabela orcamentos
+      // 1. Cria o registro na tabela orcamentos com homologado_pela_empresa = false
       const { error: orcamentoError } = await supabase
         .from("orcamentos")
         .insert({
@@ -199,29 +289,22 @@ export default function PrestadorDashboard() {
           valor_servico_r$: valServico,
           valor_materiais_r$: valMateriais,
           prazo_execucao_dias: parseInt(prazo),
-          observacoes_tecnicas: observacoes
+          observacoes_tecnicas: observacoes,
+          homologado_pela_empresa: false
         })
 
       if (orcamentoError) throw orcamentoError
 
-      // 2. Atualiza o status do chamado correspondente para 'orcamento_recebido'
-      const { error: chamadoError } = await supabase
-        .from("chamados")
-        .update({ status: "orcamento_recebido" })
-        .eq("id", chamadoCotando.id)
-
-      if (chamadoError) throw chamadoError
-
-      // 3. Insere registro de alteração de status no histórico
+      // 2. Insere histórico de cotação realizada sem mudar o status do chamado
       await supabase.from("historico_chamados").insert({
         chamado_id: chamadoCotando.id,
         usuario_id: user?.id,
         status_anterior: "aguardando_orcamento" as StatusChamado,
-        novo_status: "orcamento_recebido" as StatusChamado,
-        observacao: `Orçamento técnico de R$ ${(valServico + valMateriais).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} enviado pelo prestador ${perfil?.nome}.`
+        novo_status: "aguardando_orcamento" as StatusChamado,
+        observacao: `Orçamento preliminar de R$ ${(valServico + valMateriais).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} inserido pelo técnico de campo ${perfil?.nome}. Aguardando homologação interna.`
       })
 
-      setSucesso("Orçamento enviado com sucesso!")
+      setSucesso("Orçamento enviado para a homologação da sua Empresa Prestadora com sucesso!")
       setChamadoCotando(null)
       setValorServico("")
       setValorMateriais("")
@@ -231,13 +314,132 @@ export default function PrestadorDashboard() {
       await loadPrestadorData()
     } catch (err: any) {
       console.error(err)
-      setErro(err.message || "Erro ao tentar enviar proposta.")
+      setErro(err.message || "Erro ao tentar enviar proposta técnica.")
     } finally {
       setSalvando(false)
     }
   }
 
-  // Altera status da OS de os_liberada para em_execucao
+  // Empresa PJ: Delega o chamado para um técnico vinculado
+  const handleDelegarChamado = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!chamadoDelegando || !tecnicoSelecionadoId) return
+    setSalvando(true)
+    setErro(null)
+    setSucesso(null)
+
+    try {
+      // 1. Atualiza o tecnico_id no chamado
+      const { error: chamadoError } = await supabase
+        .from("chamados")
+        .update({ tecnico_id: tecnicoSelecionadoId })
+        .eq("id", chamadoDelegando.id)
+
+      if (chamadoError) throw chamadoError
+
+      const tecNome = tecnicosDisponiveis.find(t => t.id === tecnicoSelecionadoId)?.nome || "Técnico"
+
+      // 2. Insere histórico de delegação
+      await supabase.from("historico_chamados").insert({
+        chamado_id: chamadoDelegando.id,
+        usuario_id: user?.id,
+        status_anterior: chamadoDelegando.status,
+        novo_status: chamadoDelegando.status,
+        observacao: `Chamado designado ao técnico ${tecNome} para realização de vistoria e cotação.`
+      })
+
+      setSucesso(`Chamado delegado com sucesso para o técnico ${tecNome}!`)
+      setChamadoDelegando(null)
+      setTecnicoSelecionadoId("")
+
+      await loadPrestadorData()
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro ao tentar delegar chamado.")
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  // Empresa PJ: Abre painel para homologar e editar o orçamento do técnico
+  const iniciarHomologacao = (chamado: Chamado, orcamento: any) => {
+    setChamadoHomologando(chamado)
+    setOrcamentoHomologando(orcamento)
+    setHomologarValorServico(orcamento.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 }))
+    setHomologarValorMateriais(orcamento.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 }))
+    setHomologarPrazo(String(orcamento.prazo_execucao_dias))
+    setHomologarObservacoes(orcamento.observacoes_tecnicas || "")
+  }
+
+  // Empresa PJ: Homologa proposta e envia definitivamente para a Imobiliária
+  const handleHomologarOrcamento = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!chamadoHomologando || !orcamentoHomologando) return
+    setSalvando(true)
+    setErro(null)
+    setSucesso(null)
+
+    const valServico = desformatarMoeda(homologarValorServico)
+    const valMateriais = desformatarMoeda(homologarValorMateriais)
+
+    if (valServico <= 0 || !homologarPrazo) {
+      setErro("Preencha o valor de serviço e o prazo de execução para homologar.")
+      setSalvando(false)
+      return
+    }
+
+    try {
+      // 1. Atualiza o orçamento com valores homologados e marca homologado_pela_empresa = true
+      const { error: orcamentoError } = await supabase
+        .from("orcamentos")
+        .update({
+          valor_servico_r$: valServico,
+          valor_materiais_r$: valMateriais,
+          prazo_execucao_dias: parseInt(homologarPrazo),
+          observacoes_tecnicas: homologarObservacoes,
+          homologado_pela_empresa: true
+        })
+        .eq("id", orcamentoHomologando.id)
+
+      if (orcamentoError) throw orcamentoError
+
+      // 2. Atualiza status do chamado correspondente para 'orcamento_recebido' (visível para imobiliária)
+      const { error: chamadoError } = await supabase
+        .from("chamados")
+        .update({ status: "orcamento_recebido" })
+        .eq("id", chamadoHomologando.id)
+
+      if (chamadoError) throw chamadoError
+
+      const totalHomologado = valServico + valMateriais
+
+      // 3. Insere registro de alteração de status no histórico
+      await supabase.from("historico_chamados").insert({
+        chamado_id: chamadoHomologando.id,
+        usuario_id: user?.id,
+        status_anterior: "aguardando_orcamento" as StatusChamado,
+        novo_status: "orcamento_recebido" as StatusChamado,
+        observacao: `Proposta técnica homologada pela Empresa PJ. Valor Total: R$ ${totalHomologado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}. Enviado para a Imobiliária.`
+      })
+
+      setSucesso("Orçamento homologado e submetido para a Imobiliária!")
+      setChamadoHomologando(null)
+      setOrcamentoHomologando(null)
+      setHomologarValorServico("")
+      setHomologarValorMateriais("")
+      setHomologarPrazo("")
+      setHomologarObservacoes("")
+
+      await loadPrestadorData()
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro ao tentar homologar orçamento.")
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  // Técnico: Altera status da OS de os_liberada para em_execucao
   const handleIniciarServico = async (chamado: Chamado) => {
     setErro(null)
     setSucesso(null)
@@ -255,18 +457,18 @@ export default function PrestadorDashboard() {
         usuario_id: user?.id,
         status_anterior: "os_liberada" as StatusChamado,
         novo_status: "em_execucao" as StatusChamado,
-        observacao: "Serviço iniciado no local pelo prestador."
+        observacao: `Execução do serviço iniciada no local pelo técnico ${perfil?.nome}.`
       })
 
       setSucesso("Ordem de serviço iniciada! Bom trabalho.")
       await loadPrestadorData()
     } catch (err: any) {
       console.error(err)
-      setErro("Falha ao atualizar chamado.")
+      setErro("Falha ao atualizar status da O.S.")
     }
   }
 
-  // Trata seleção de imagem da conclusão e roda o compressor Canvas
+  // Técnico: Trata seleção de imagem da conclusão e roda o compressor Canvas
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const arquivo = e.target.files?.[0]
     if (!arquivo) return
@@ -281,7 +483,7 @@ export default function PrestadorDashboard() {
     }
   }
 
-  // Envia a conclusão de serviço (em_execucao -> servico_concluido)
+  // Técnico: Envia a conclusão de serviço (em_execucao -> servico_concluido)
   const handleConcluirServico = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!chamadoConcluindo) return
@@ -324,6 +526,7 @@ export default function PrestadorDashboard() {
       if (midiaError) throw midiaError
 
       // 3. Atualiza o orçamento correspondente com o relatório técnico de conclusão
+      // Puxamos o orçamento associado a esse chamado para atualizar
       const { error: orcamentoError } = await supabase
         .from("orcamentos")
         .update({
@@ -331,7 +534,6 @@ export default function PrestadorDashboard() {
           data_agendamento_servico: new Date().toISOString()
         })
         .eq("chamado_id", chamadoConcluindo.id)
-        .eq("prestador_id", user?.id)
 
       if (orcamentoError) throw orcamentoError
 
@@ -349,7 +551,7 @@ export default function PrestadorDashboard() {
         usuario_id: user?.id,
         status_anterior: "em_execucao" as StatusChamado,
         novo_status: "servico_concluido" as StatusChamado,
-        observacao: "Execução finalizada pelo técnico. Relatório e imagem do conserto enviados."
+        observacao: `Execução finalizada pelo técnico ${perfil?.nome}. Relatório e foto comprobatória enviados.`
       })
 
       setSucesso("Serviço concluído com sucesso! Aguardando homologação da imobiliária.")
@@ -375,9 +577,14 @@ export default function PrestadorDashboard() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-xl md:text-2xl font-extrabold text-occasio-navy flex items-center gap-2">
-            <Hammer className="h-6 w-6 text-occasio-blue" /> Painel do Prestador
+            <Hammer className="h-6 w-6 text-occasio-blue" /> 
+            {ehTecnico ? "PWA do Técnico" : "Painel do Prestador (PJ)"}
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">Gestão de cotações e execução técnica.</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {ehTecnico 
+              ? "Orçamentos de campo e ordens de serviço delegadas." 
+              : "Gestão comercial, delegação técnica e homologação."}
+          </p>
         </div>
         {realtimeLoading && (
           <span className="text-xs text-occasio-blue flex items-center gap-1 font-semibold animate-pulse">
@@ -405,7 +612,13 @@ export default function PrestadorDashboard() {
       {/* Abas PWA */}
       <div className="grid grid-cols-2 gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6">
         <button
-          onClick={() => { setActiveTab("orcamentos"); setChamadoCotando(null); setChamadoConcluindo(null) }}
+          onClick={() => { 
+            setActiveTab("orcamentos")
+            setChamadoCotando(null)
+            setChamadoConcluindo(null)
+            setChamadoDelegando(null)
+            setChamadoHomologando(null)
+          }}
           className={`py-2 text-xs font-bold rounded-md transition-all ${
             activeTab === "orcamentos" 
               ? "bg-white text-occasio-navy shadow-sm" 
@@ -415,7 +628,13 @@ export default function PrestadorDashboard() {
           Orçamentos Pendentes ({chamadosPendentes.length})
         </button>
         <button
-          onClick={() => { setActiveTab("os"); setChamadoCotando(null); setChamadoConcluindo(null) }}
+          onClick={() => { 
+            setActiveTab("os")
+            setChamadoCotando(null)
+            setChamadoConcluindo(null)
+            setChamadoDelegando(null)
+            setChamadoHomologando(null)
+          }}
           className={`py-2 text-xs font-bold rounded-md transition-all ${
             activeTab === "os" 
               ? "bg-white text-occasio-navy shadow-sm" 
@@ -434,61 +653,131 @@ export default function PrestadorDashboard() {
       ) : (
         <>
           {/* ======================== ABA 1: ORÇAMENTOS PENDENTES ======================== */}
-          {activeTab === "orcamentos" && !chamadoCotando && (
+          {activeTab === "orcamentos" && !chamadoCotando && !chamadoDelegando && !chamadoHomologando && (
             <div className="space-y-4">
               {chamadosPendentes.length === 0 ? (
                 <div className="text-center py-16 text-slate-400 bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center gap-3">
                   <HelpCircle className="h-10 w-10 text-slate-300" />
                   <div className="font-semibold text-slate-500">Nenhum chamado pendente</div>
                   <p className="max-w-xs mx-auto text-[11px] text-slate-400">
-                    Aguarde a imobiliária enviar novas solicitações de cotação para você.
+                    {ehTecnico 
+                      ? "Você não possui vistorias ou cotações delegadas no momento."
+                      : "Aguarde a imobiliária disparar novos chamados comerciais para a sua empresa."}
                   </p>
                 </div>
               ) : (
-                chamadosPendentes.map((chamado) => (
-                  <Card key={chamado.id} className="border-slate-200 shadow-sm hover:shadow-md transition-all bg-white">
-                    <CardContent className="p-4 space-y-3 text-xs">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                            {chamado.imovel?.codigo_imovel || "Sem Código"}
-                          </span>
-                          <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
+                chamadosPendentes.map((chamado) => {
+                  const orcPendente = chamado.orcamentos?.find(o => !o.homologado_pela_empresa)
+                  const jaEnviouProposta = !!orcPendente
+
+                  return (
+                    <Card key={chamado.id} className="border-slate-200 shadow-sm hover:shadow-md transition-all bg-white">
+                      <CardContent className="p-4 space-y-3 text-xs">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                              {chamado.imovel?.codigo_imovel || "Sem Código"}
+                            </span>
+                            <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
+                          </div>
+                          
+                          {/* Badge de status interno no marketplace */}
+                          {ehTecnico ? (
+                            <Badge className="bg-yellow-50 text-yellow-800 border-yellow-200 border text-[9px] font-bold">
+                              Cotar Serviço
+                            </Badge>
+                          ) : !chamado.tecnico_id ? (
+                            <Badge className="bg-red-50 text-red-800 border-red-200 border text-[9px] font-bold uppercase animate-pulse">
+                              Aguardando Técnico
+                            </Badge>
+                          ) : jaEnviouProposta ? (
+                            <Badge className="bg-orange-50 text-orange-800 border-orange-200 border text-[9px] font-bold uppercase animate-pulse">
+                              Homologar
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-slate-50 text-slate-600 border-slate-200 border text-[9px] font-bold uppercase">
+                              Aguardando Cotação
+                            </Badge>
+                          )}
                         </div>
-                        <Badge className="bg-yellow-50 text-yellow-800 border-yellow-200 border text-[9px] font-bold">
-                          Cotar
-                        </Badge>
-                      </div>
-                      <p className="text-slate-500 line-clamp-2 leading-relaxed">{chamado.descricao_problema}</p>
-                      
-                      <div className="flex justify-between items-center text-[10px] text-slate-400 border-t border-slate-100 pt-2.5">
-                        <span>Endereço: <strong>{chamado.imovel?.endereco || "Não disponível"}</strong></span>
-                        <Button 
-                          onClick={() => setChamadoCotando(chamado)} 
-                          size="sm" 
-                          className="bg-occasio-blue hover:bg-occasio-navy text-white text-[10px] px-2 h-7 font-bold"
-                        >
-                          Enviar Orçamento
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
+                        <p className="text-slate-500 line-clamp-2 leading-relaxed">{chamado.descricao_problema}</p>
+                        
+                        <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded border border-slate-100 text-[11px] text-slate-600">
+                          <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"}</div>
+                          {!ehTecnico && chamado.tecnico && (
+                            <div><strong>Técnico designado:</strong> <strong className="text-slate-800">{chamado.tecnico.nome}</strong></div>
+                          )}
+                          {!ehTecnico && jaEnviouProposta && (
+                            <div className="bg-orange-50/50 border border-orange-100 p-2 rounded mt-1 text-orange-950">
+                              <span className="block font-bold text-[10px] uppercase text-orange-800 mb-0.5">Valores inseridos pelo técnico:</span>
+                              Mão de Obra: R$ {orcPendente.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                              Materiais: R$ {orcPendente.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                              Prazo: {orcPendente.prazo_execucao_dias} dias
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
+                          {ehTecnico ? (
+                            <Button 
+                              onClick={() => setChamadoCotando(chamado)} 
+                              size="sm" 
+                              className="bg-occasio-blue hover:bg-occasio-navy text-white text-[10px] px-3 h-7 font-bold"
+                            >
+                              Enviar Orçamento
+                            </Button>
+                          ) : !chamado.tecnico_id ? (
+                            <Button 
+                              onClick={() => {
+                                setChamadoDelegando(chamado)
+                                setTecnicoSelecionadoId("")
+                              }} 
+                              size="sm" 
+                              className="bg-red-600 hover:bg-red-700 text-white text-[10px] px-3 h-7 font-bold flex items-center gap-1"
+                            >
+                              <UserCheck className="h-3.5 w-3.5" /> Designar Técnico
+                            </Button>
+                          ) : jaEnviouProposta ? (
+                            <Button 
+                              onClick={() => iniciarHomologacao(chamado, orcPendente)} 
+                              size="sm" 
+                              className="bg-orange-600 hover:bg-orange-700 text-white text-[10px] px-3 h-7 font-bold flex items-center gap-1"
+                            >
+                              <FileText className="h-3.5 w-3.5" /> Revisar &amp; Homologar
+                            </Button>
+                          ) : (
+                            <Button 
+                              onClick={() => {
+                                setChamadoDelegando(chamado)
+                                setTecnicoSelecionadoId(chamado.tecnico?.id || "")
+                              }}
+                              variant="outline"
+                              size="sm" 
+                              className="text-slate-600 hover:bg-slate-50 text-[10px] px-3 h-7 font-bold border-slate-200"
+                            >
+                              Re-designar Técnico
+                            </Button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })
               )}
             </div>
           )}
 
-          {/* ======================== FORMULÁRIO DE ENVIO DE ORÇAMENTO ======================== */}
+          {/* ======================== TÉCNICO: FORMULÁRIO DE ENVIO DE ORÇAMENTO ======================== */}
           {activeTab === "orcamentos" && chamadoCotando && (
             <Card className="border-slate-200 shadow-md bg-white">
               <CardHeader className="bg-slate-50 border-b border-slate-200 p-4">
-                <CardTitle className="text-sm font-extrabold text-occasio-navy">Proposta de Orçamento</CardTitle>
+                <CardTitle className="text-sm font-extrabold text-occasio-navy">Cotação de Campo (Técnico)</CardTitle>
                 <CardDescription className="text-xs">Para: {chamadoCotando.titulo}</CardDescription>
               </CardHeader>
               <CardContent className="p-4">
-                <form onSubmit={handleEnviarOrcamento} className="space-y-4">
+                <form onSubmit={handleEnviarOrcamentoTecnico} className="space-y-4">
                   <div className="p-3 bg-slate-50 rounded border text-xs text-slate-600 mb-2">
-                    <strong>Detalhes da ocorrência:</strong>
+                    <strong>Descrição do Problema:</strong>
                     <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoCotando.descricao_problema}</p>
                     
                     <div className="mt-3 bg-amber-50 border border-amber-200 rounded-md p-3 text-amber-900">
@@ -557,11 +846,11 @@ export default function PrestadorDashboard() {
 
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      Observações Técnicas
+                      Observações Técnicas de Campo
                     </label>
                     <textarea
                       rows={3}
-                      placeholder="Ex: Incluso troca de válvula hydra de latão e lixamento do cano."
+                      placeholder="Descreva as particularidades e as necessidades constatadas na vistoria local."
                       value={observacoes}
                       onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setObservacoes(e.target.value)}
                       className="w-full border border-slate-200 rounded-md p-2 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue resize-none"
@@ -573,7 +862,167 @@ export default function PrestadorDashboard() {
                       Voltar
                     </Button>
                     <Button disabled={salvando} size="sm" type="submit" className="bg-occasio-blue hover:bg-occasio-navy text-white font-semibold">
-                      {salvando ? "Enviando..." : "Enviar Proposta"}
+                      {salvando ? "Enviando..." : "Enviar Orçamento"}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ======================== EMPRESA PJ: FORMULÁRIO DE DELEGAÇÃO ======================== */}
+          {activeTab === "orcamentos" && chamadoDelegando && (
+            <Card className="border-slate-200 shadow-md bg-white">
+              <CardHeader className="bg-slate-50 border-b border-slate-200 p-4">
+                <CardTitle className="text-sm font-extrabold text-occasio-navy flex items-center gap-1.5">
+                  <UserCheck className="h-4 w-4 text-occasio-blue" />
+                  Designar Técnico de Campo
+                </CardTitle>
+                <CardDescription className="text-xs">Para: {chamadoDelegando.titulo}</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4">
+                <form onSubmit={handleDelegarChamado} className="space-y-4">
+                  <div className="p-3 bg-slate-50 rounded border text-xs text-slate-600 mb-2">
+                    <strong>Localização &amp; Horário:</strong>
+                    <p className="mt-1 leading-relaxed">
+                      Endereço: <strong>{chamadoDelegando.imovel.endereco}</strong><br/>
+                      Preferência: <strong className="text-amber-700 font-extrabold">{chamadoDelegando.disponibilidade_atendimento}</strong>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Selecione um Técnico do Time *
+                    </label>
+                    {tecnicosDisponiveis.length === 0 ? (
+                      <div className="text-[11px] text-red-500 font-semibold p-2 bg-red-50 border border-red-100 rounded">
+                        Você não possui técnicos cadastrados em sua equipe! Cadastre-os na tela de equipe.
+                      </div>
+                    ) : (
+                      <select
+                        value={tecnicoSelecionadoId}
+                        onChange={(e) => setTecnicoSelecionadoId(e.target.value)}
+                        required
+                        className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                      >
+                        <option value="">Selecione um técnico...</option>
+                        {tecnicosDisponiveis.map((tec) => (
+                          <option key={tec.id} value={tec.id}>{tec.nome}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button variant="outline" size="sm" type="button" onClick={() => setChamadoDelegando(null)}>
+                      Cancelar
+                    </Button>
+                    <Button 
+                      disabled={salvando || !tecnicoSelecionadoId} 
+                      size="sm" 
+                      type="submit" 
+                      className="bg-occasio-blue hover:bg-occasio-navy text-white font-semibold"
+                    >
+                      {salvando ? "Deleganado..." : "Delegar OS"}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ======================== EMPRESA PJ: FORMULÁRIO DE HOMOLOGAÇÃO ======================== */}
+          {activeTab === "orcamentos" && chamadoHomologando && (
+            <Card className="border-slate-200 shadow-md bg-white">
+              <CardHeader className="bg-slate-50 border-b border-slate-200 p-4">
+                <CardTitle className="text-sm font-extrabold text-occasio-navy flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-orange-600" />
+                  Homologar &amp; Revisar Orçamento
+                </CardTitle>
+                <CardDescription className="text-xs">Para: {chamadoHomologando.titulo}</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4">
+                <form onSubmit={handleHomologarOrcamento} className="space-y-4">
+                  <div className="p-3 bg-slate-50 rounded border text-[11px] text-slate-600 mb-2 leading-relaxed">
+                    <strong>Dados Originais do Técnico:</strong><br/>
+                    Mão de Obra Original: R$ {orcamentoHomologando.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                    Materiais Original: R$ {orcamentoHomologando.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                    Observações de Campo: <span className="italic">&ldquo;{orcamentoHomologando.observacoes_tecnicas || "Nenhuma"}&rdquo;</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Mão de Obra Homologada *
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold select-none">
+                          R$
+                        </span>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="0,00"
+                          className="pl-9 pr-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                          value={homologarValorServico}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHomologarValorServico(formatarMoedaInput(e.target.value))}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Materiais Homologados
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold select-none">
+                          R$
+                        </span>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="0,00"
+                          className="pl-9 pr-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                          value={homologarValorMateriais}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHomologarValorMateriais(formatarMoedaInput(e.target.value))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Prazo Homologado (em dias) *
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="Ex: 3"
+                      value={homologarPrazo}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHomologarPrazo(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Observações Finais para a Imobiliária
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Ex: Valores revisados pela gerência. Adicionada garantia estendida de 90 dias."
+                      value={homologarObservacoes}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setHomologarObservacoes(e.target.value)}
+                      className="w-full border border-slate-200 rounded-md p-2 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue resize-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button variant="outline" size="sm" type="button" onClick={() => setChamadoHomologando(null)}>
+                      Voltar
+                    </Button>
+                    <Button disabled={salvando} size="sm" type="submit" className="bg-orange-600 hover:bg-orange-700 text-white font-semibold flex items-center gap-1">
+                      Homologar &amp; Enviar Proposta
                     </Button>
                   </div>
                 </form>
@@ -589,7 +1038,9 @@ export default function PrestadorDashboard() {
                   <Wrench className="h-10 w-10 text-slate-300" />
                   <div className="font-semibold text-slate-500">Nenhuma OS em andamento</div>
                   <p className="max-w-xs mx-auto text-[11px] text-slate-400">
-                    Ordens de serviço liberadas pelas imobiliárias aparecerão aqui.
+                    {ehTecnico 
+                      ? "Você não possui ordens de serviço ativas sob sua execução."
+                      : "Sua equipe não possui ordens de serviço ativas no momento."}
                   </p>
                 </div>
               ) : (
@@ -608,34 +1059,47 @@ export default function PrestadorDashboard() {
                             ? "bg-teal-50 text-teal-800 border-teal-200" 
                             : "bg-orange-50 text-orange-800 border-orange-200"
                         } border text-[9px] font-bold uppercase`}>
-                          {chamado.status.replace("_", " ")}
+                          {chamado.status === 'os_liberada' ? "Liberada" : "Em Execução"}
                         </Badge>
                       </div>
                       
-                      <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600">
-                        <strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})<br/>
-                        <strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}
-                      </div>
-
-                      <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
-                        {chamado.status === 'os_liberada' ? (
-                          <Button 
-                            onClick={() => handleIniciarServico(chamado)} 
-                            size="sm" 
-                            className="bg-teal-600 hover:bg-teal-700 text-white font-bold h-8 text-[11px]"
-                          >
-                            Iniciar Execução
-                          </Button>
-                        ) : (
-                          <Button 
-                            onClick={() => setChamadoConcluindo(chamado)} 
-                            size="sm" 
-                            className="bg-green-600 hover:bg-green-700 text-white font-bold h-8 text-[11px]"
-                          >
-                            Concluir Conserto
-                          </Button>
+                      <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
+                        <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})</div>
+                        <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
+                        {!ehTecnico && chamado.tecnico && (
+                          <div className="pt-1 border-t border-slate-200 mt-1 flex items-center gap-1 text-slate-700">
+                            <User className="h-3 w-3 text-slate-400" />
+                            Responsável: <strong className="text-slate-800">{chamado.tecnico.nome}</strong>
+                          </div>
                         )}
                       </div>
+
+                      {ehTecnico ? (
+                        <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
+                          {chamado.status === 'os_liberada' ? (
+                            <Button 
+                              onClick={() => handleIniciarServico(chamado)} 
+                              size="sm" 
+                              className="bg-teal-600 hover:bg-teal-700 text-white font-bold h-8 text-[11px]"
+                            >
+                              Iniciar Execução
+                            </Button>
+                          ) : (
+                            <Button 
+                              onClick={() => setChamadoConcluindo(chamado)} 
+                              size="sm" 
+                              className="bg-green-600 hover:bg-green-700 text-white font-bold h-8 text-[11px]"
+                            >
+                              Concluir Conserto
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-right font-medium text-slate-400 border-t border-slate-100 pt-2 flex items-center justify-end gap-1.5">
+                          <span>Acompanhamento PWA</span>
+                          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))
@@ -643,7 +1107,7 @@ export default function PrestadorDashboard() {
             </div>
           )}
 
-          {/* ======================== FORMULÁRIO DE ENTREGA DE SERVIÇO (CONCLUSÃO) ======================== */}
+          {/* ======================== TÉCNICO: FORMULÁRIO DE ENTREGA DE SERVIÇO (CONCLUSÃO) ======================== */}
           {activeTab === "os" && chamadoConcluindo && (
             <Card className="border-slate-200 shadow-md bg-white">
               <CardHeader className="bg-slate-50 border-b border-slate-200 p-4">
@@ -658,7 +1122,7 @@ export default function PrestadorDashboard() {
                     </label>
                     <textarea
                       rows={4}
-                      placeholder="Descreva as ações realizadas para sanar o problema técnico."
+                      placeholder="Descreva detalhadamente o conserto realizado para resolver o problema estrutural ou de depreciação."
                       value={relatorio}
                       onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRelatorio(e.target.value)}
                       required
@@ -673,7 +1137,7 @@ export default function PrestadorDashboard() {
                     <div className="mt-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-lg p-5 bg-slate-50/50 hover:bg-slate-50 transition-colors">
                       {imagemPreview ? (
                         <div className="relative w-full flex flex-col items-center">
-                          <img src={imagemPreview} alt="Conserto finalizado" className="max-h-36 rounded shadow-md object-contain mb-2" />
+                           <img src={imagemPreview} alt="Conserto finalizado" className="max-h-36 rounded shadow-md object-contain mb-2" />
                           <Button 
                             variant="outline" 
                             size="sm" 
@@ -700,7 +1164,7 @@ export default function PrestadorDashboard() {
                               />
                             </label>
                           </div>
-                          <p className="text-[9px] text-slate-400">Comprimido pelo Canvas antes de enviar.</p>
+                          <p className="text-[9px] text-slate-400">Comprimida pelo Canvas antes do upload.</p>
                         </div>
                       )}
                     </div>

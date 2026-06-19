@@ -11,6 +11,8 @@ import Clientes from "./pages/imobiliaria/Clientes"
 import InquilinoDashboard from "./pages/inquilino/Dashboard"
 import PrestadorDashboard from "./pages/prestador/Dashboard"
 import ProprietarioDashboard from "./pages/proprietario/Dashboard"
+import AdminVinculos from "./pages/admin/Vinculos"
+import PrestadorEquipe from "./pages/prestador/Equipe"
 
 // Componente auxiliar para tratar rolagem suave de âncoras (hash)
 // e garantir que a página role para o topo ao alternar de rota
@@ -115,12 +117,23 @@ function MainLayout() {
 
             {/* Links exclusivos para Prestador ou Super Admin */}
             {(perfil?.perfil === "prestador" || perfil?.perfil === "super_admin") && (
-              <Link 
-                to="/prestador/dashboard" 
-                className={`${location.pathname === "/prestador/dashboard" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
-              >
-                Painel Prestador
-              </Link>
+              <>
+                <Link 
+                  to="/prestador/dashboard" 
+                  className={`${location.pathname === "/prestador/dashboard" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+                >
+                  Painel Prestador
+                </Link>
+                {/* Se for prestador empresa (conta-mãe), mostra o link Minha Equipe */}
+                {(perfil?.perfil === "prestador" && !perfil?.empresa_mae_id) && (
+                  <Link 
+                    to="/prestador/equipe" 
+                    className={`${location.pathname === "/prestador/equipe" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+                  >
+                    Minha Equipe
+                  </Link>
+                )}
+              </>
             )}
             
             {/* Links exclusivos para Proprietário ou Super Admin */}
@@ -130,6 +143,16 @@ function MainLayout() {
                 className={`${location.pathname === "/proprietario/dashboard" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
               >
                 Painel Proprietário
+              </Link>
+            )}
+
+            {/* Links exclusivos para Super Admin */}
+            {perfil?.perfil === "super_admin" && (
+              <Link 
+                to="/admin/vinculos" 
+                className={`${location.pathname === "/admin/vinculos" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+              >
+                Vínculos
               </Link>
             )}
             
@@ -190,6 +213,8 @@ function MainLayout() {
           <Route path="/inquilino/dashboard" element={<InquilinoDashboard />} />
           <Route path="/prestador/dashboard" element={<PrestadorDashboard />} />
           <Route path="/proprietario/dashboard" element={<ProprietarioDashboard />} />
+          <Route path="/admin/vinculos" element={<AdminVinculos />} />
+          <Route path="/prestador/equipe" element={<PrestadorEquipe />} />
         </Routes>
       </main>
 

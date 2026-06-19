@@ -33,6 +33,8 @@ interface Chamado {
   criado_em: string
   imovel_id: string
   inquilino_id: string
+  empresa_prestadora_id?: string | null
+  tecnico_id?: string | null
   imovel: {
     codigo_imovel: string
     endereco: string
@@ -41,6 +43,12 @@ interface Chamado {
   inquilino: {
     nome: string
   }
+  empresa_prestadora?: {
+    nome: string
+  } | null
+  tecnico?: {
+    nome: string
+  } | null
 }
 
 // Configurações visuais dos badges de status
@@ -102,6 +110,8 @@ export default function Dashboard() {
   const [novaResponsabilidade, setNovaResponsabilidade] = useState<Responsabilidade | "">("")
   const [observacaoHistorico, setObservacaoHistorico] = useState("")
   const [salvandoAcao, setSalvandoAcao] = useState(false)
+  const [empresasVinculadas, setEmpresasVinculadas] = useState<any[]>([])
+  const [empresaPrestadoraSelecionadaId, setEmpresaPrestadoraSelecionadaId] = useState("")
 
   // Estados para galeria de mídias, zoom de imagem e orçamento ativo
   const [midias, setMidias] = useState<{ id: string; url_storage: string; tipo_midia: string }[]>([])
@@ -172,6 +182,28 @@ export default function Dashboard() {
         .order("nome")
       if (inquilinosError) throw inquilinosError
       setInquilinosDisponiveis(inquilinosData || [])
+
+      // 3. Carrega as Empresas Prestadoras vinculadas
+      if (perfil?.perfil === "super_admin") {
+        const { data: empData, error: empError } = await supabase
+          .from("perfis")
+          .select("id, nome")
+          .eq("perfil", "prestador")
+          .is("empresa_mae_id", null)
+          .order("nome")
+        if (empError) throw empError
+        setEmpresasVinculadas(empData || [])
+      } else {
+        const { data: vincData, error: vincError } = await supabase
+          .from("vinculos_saas")
+          .select(`
+            empresa:empresa_prestadora_id (id, nome)
+          `)
+          .eq("imobiliaria_id", user?.id)
+        if (vincError) throw vincError
+        const list = vincData?.map((item: any) => item.empresa).filter(Boolean) || []
+        setEmpresasVinculadas(list)
+      }
 
     } catch (err) {
       console.error("Erro ao carregar dados do formulário de chamados:", err)
@@ -329,7 +361,9 @@ export default function Dashboard() {
         .select(`
           *,
           imovel:imovel_id (codigo_imovel, endereco, limite_alcada_r$),
-          inquilino:inquilino_id (nome)
+          inquilino:inquilino_id (nome),
+          empresa_prestadora:empresa_prestadora_id (nome),
+          tecnico:tecnico_id (nome)
         `)
         .order("criado_em", { ascending: false })
 
@@ -564,6 +598,14 @@ export default function Dashboard() {
       if (novoStatus) updates.status = novoStatus
       if (novaResponsabilidade) updates.responsabilidade = novaResponsabilidade
 
+      if (novoStatus === "aguardando_orcamento") {
+        if (!empresaPrestadoraSelecionadaId) {
+          throw new Error("Você precisa selecionar uma Empresa Prestadora para cotação.")
+        }
+        updates.empresa_prestadora_id = empresaPrestadoraSelecionadaId
+        updates.tecnico_id = null
+      }
+
       // 1. Atualiza o chamado
       const { error: chamadoError } = await supabase
         .from("chamados")
@@ -591,6 +633,7 @@ export default function Dashboard() {
       setNovoStatus("")
       setNovaResponsabilidade("")
       setObservacaoHistorico("")
+      setEmpresaPrestadoraSelecionadaId("")
       
       // Recarrega
       await loadChamados()
@@ -1128,15 +1171,31 @@ export default function Dashboard() {
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                         Chamado Selecionado
                       </label>
-                      <div className="p-3 bg-slate-50 rounded border border-slate-200/50">
+                      <div className="p-3 bg-slate-50 rounded border border-slate-200/50 space-y-1">
                         <div className="text-xs font-bold text-occasio-navy font-mono">ID: {chamadoAtivo.id.slice(0,8)}...</div>
                         <div className="text-sm font-extrabold text-slate-800 line-clamp-1 mt-0.5">{chamadoAtivo.titulo}</div>
-                        <div className="text-xs text-slate-400 mt-1 flex justify-between">
+                        <div className="text-xs text-slate-400 mt-1 flex justify-between border-t border-slate-200/50 pt-1">
                           <span>Alçada Imóvel:</span>
                           <strong className="text-slate-600">
                             {chamadoAtivo.imovel.limite_alcada_r$.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                           </strong>
                         </div>
+                        {chamadoAtivo.empresa_prestadora && (
+                          <div className="text-xs text-slate-400 flex justify-between border-t border-slate-200/50 pt-1">
+                            <span>Empresa designada:</span>
+                            <strong className="text-slate-700 font-bold">
+                              {chamadoAtivo.empresa_prestadora.nome}
+                            </strong>
+                          </div>
+                        )}
+                        {chamadoAtivo.tecnico && (
+                          <div className="text-xs text-slate-400 flex justify-between border-t border-slate-200/50 pt-1">
+                            <span>Técnico responsável:</span>
+                            <strong className="text-slate-700 font-bold">
+                              {chamadoAtivo.tecnico.nome}
+                            </strong>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1155,6 +1214,31 @@ export default function Dashboard() {
                         ))}
                       </select>
                     </div>
+
+                    {novoStatus === "aguardando_orcamento" && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                          Empresa Prestadora (PJ) *
+                        </label>
+                        {empresasVinculadas.length === 0 ? (
+                          <div className="text-[11px] text-red-500 font-semibold p-2 bg-red-50 border border-red-100 rounded">
+                            Nenhuma Empresa Prestadora PJ vinculada à sua imobiliária!
+                          </div>
+                        ) : (
+                          <select
+                            value={empresaPrestadoraSelecionadaId}
+                            onChange={(e) => setEmpresaPrestadoraSelecionadaId(e.target.value)}
+                            required
+                            className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                          >
+                            <option value="">Selecione uma empresa...</option>
+                            {empresasVinculadas.map((emp) => (
+                              <option key={emp.id} value={emp.id}>{emp.nome}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
