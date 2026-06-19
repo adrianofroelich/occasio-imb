@@ -80,19 +80,23 @@ occasio-imb/
 │   │   ├── supabase.ts     # Inicialização e instância do SDK do Supabase Client
 │   │   └── utils.ts        # Utilitários de classes Tailwind (clsx + tailwind-merge)
 │   ├── pages/
+│   │   ├── admin/
+│   │   │   └── Dashboard.tsx # Painel SaaS Enterprise para controle centralizado de Imobiliárias, Prestadoras e Vínculos (Fase 10)
 │   │   ├── imobiliaria/
 │   │   │   ├── Clientes.tsx  # Cadastro e onboarding de clientes com supabaseAdmin (Fase 8)
-│   │   │   ├── Dashboard.tsx # Painel realtime de chamados estilo lista dinâmica
+│   │   │   ├── Dashboard.tsx # Painel realtime de chamados estilo lista dinâmica (Fase 3)
 │   │   │   └── Imoveis.tsx   # Cadastro e listagem de imóveis (Fase 3)
 │   │   ├── inquilino/
 │   │   │   └── Dashboard.tsx # Painel realtime e abertura de chamado do inquilino (Fase 4)
 │   │   ├── prestador/
-│   │   │   └── Dashboard.tsx # Painel mobile-first de propostas e OS ativas do técnico (Fase 5)
+│   │   │   ├── Dashboard.tsx # Painel mobile-first de propostas, delegação técnica e OS do prestador/técnico (Fase 9)
+│   │   │   └── Equipe.tsx    # Cadastro de técnicos vinculados à Empresa Prestadora PJ (Fase 9)
 │   │   ├── proprietario/
 │   │   │   └── Dashboard.tsx # Painel de aprovações de orçamentos e histórico do proprietário (Fase 6)
 │   │   ├── Beneficios.tsx  # Página detalhada de ROI e Gestão Patrimonial
 │   │   ├── Home.tsx        # Landing Page institucional da plataforma
-│   │   └── LoginTeste.tsx  # Simulador de autenticação para testes rápidos RLS (Fase 8)
+│   │   ├── Login.tsx       # Tela de login oficial real integrada com redirecionamento de perfis (Fase 10)
+│   │   └── LoginTeste.tsx  # Simulador de autenticação protegido para testes locais RLS (Fase 10)
 │   ├── App.tsx             # Roteador central e layout global com AuthProvider
 │   ├── main.tsx            # Arquivo de entrada do React
 │   └── index.css           # Estilos globais e tokens de cores Tailwind

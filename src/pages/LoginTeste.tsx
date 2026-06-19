@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
@@ -84,10 +85,18 @@ interface UsuarioDinamico {
 }
 
 export default function LoginTeste() {
+  const navigate = useNavigate()
   const { user, perfil, loading: authLoading, signOut } = useAuth()
   const [loading, setLoading] = useState<string | null>(null)
   const [alert, setAlert] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const [usuariosDinamicos, setUsuariosDinamicos] = useState<UsuarioDinamico[]>([])
+
+  // Bloqueio de segurança em ambiente de produção
+  useEffect(() => {
+    if (import.meta.env.PROD) {
+      navigate("/login")
+    }
+  }, [navigate])
 
   // Carrega os usuários dinâmicos da tabela de perfis (excluindo os mockados fixos)
   const carregarUsuariosDinamicos = async () => {

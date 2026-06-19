@@ -1,17 +1,18 @@
 import { useEffect } from "react"
-import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from "react-router-dom"
 import Home from "./pages/Home"
 import Beneficios from "./pages/Beneficios"
 import { Button } from "@/components/ui/button"
 import { AuthProvider, useAuth } from "./hooks/useAuth"
 import LoginTeste from "./pages/LoginTeste"
+import Login from "./pages/Login"
 import Imoveis from "./pages/imobiliaria/Imoveis"
 import Dashboard from "./pages/imobiliaria/Dashboard"
 import Clientes from "./pages/imobiliaria/Clientes"
 import InquilinoDashboard from "./pages/inquilino/Dashboard"
 import PrestadorDashboard from "./pages/prestador/Dashboard"
 import ProprietarioDashboard from "./pages/proprietario/Dashboard"
-import AdminVinculos from "./pages/admin/Vinculos"
+import AdminDashboard from "./pages/admin/Dashboard"
 import PrestadorEquipe from "./pages/prestador/Equipe"
 
 // Componente auxiliar para tratar rolagem suave de âncoras (hash)
@@ -149,10 +150,10 @@ function MainLayout() {
             {/* Links exclusivos para Super Admin */}
             {perfil?.perfil === "super_admin" && (
               <Link 
-                to="/admin/vinculos" 
-                className={`${location.pathname === "/admin/vinculos" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+                to="/admin/dashboard" 
+                className={`${location.pathname === "/admin/dashboard" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
               >
-                Vínculos
+                Painel Admin
               </Link>
             )}
             
@@ -162,12 +163,14 @@ function MainLayout() {
               <Link to="/#features" className="hover:text-occasio-blue transition-colors">Como Funciona</Link>
             )}
 
-            <Link 
-              to="/login-teste" 
-              className="text-xs bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 px-2.5 py-1 rounded transition-all font-semibold"
-            >
-              Simulador
-            </Link>
+            {!import.meta.env.PROD && (
+              <Link 
+                to="/login-teste" 
+                className="text-xs bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 px-2.5 py-1 rounded transition-all font-semibold"
+              >
+                Simulador
+              </Link>
+            )}
           </nav>
           
           {/* Botões de Ação da Direita */}
@@ -188,7 +191,7 @@ function MainLayout() {
             ) : (
               <Button 
                 variant="ghost" 
-                onClick={() => navigate("/login-teste")}
+                onClick={() => navigate("/login")}
                 className="text-occasio-navy hover:text-occasio-blue text-sm md:text-base px-2 md:px-4"
               >
                 Entrar
@@ -206,6 +209,7 @@ function MainLayout() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/beneficios" element={<Beneficios />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/login-teste" element={<LoginTeste />} />
           <Route path="/imobiliaria/clientes" element={<Clientes />} />
           <Route path="/imobiliaria/imoveis" element={<Imoveis />} />
@@ -213,7 +217,8 @@ function MainLayout() {
           <Route path="/inquilino/dashboard" element={<InquilinoDashboard />} />
           <Route path="/prestador/dashboard" element={<PrestadorDashboard />} />
           <Route path="/proprietario/dashboard" element={<ProprietarioDashboard />} />
-          <Route path="/admin/vinculos" element={<AdminVinculos />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/vinculos" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/prestador/equipe" element={<PrestadorEquipe />} />
         </Routes>
       </main>
