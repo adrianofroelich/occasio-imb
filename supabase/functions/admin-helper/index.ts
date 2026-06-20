@@ -85,6 +85,23 @@ export default {
         });
       }
 
+      if (action === "deletar-usuario") {
+        const { userId } = body;
+        const { error } = await ctx.supabaseAdmin.auth.admin.deleteUser(userId);
+
+        if (error) {
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
       return new Response(JSON.stringify({ error: "Ação inválida" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
