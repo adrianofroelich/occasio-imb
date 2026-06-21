@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Plus, Home as HomeIcon, MapPin, Ruler, DollarSign, Loader2, AlertCircle, CheckCircle } from "lucide-react"
+import { Plus, Home as HomeIcon, MapPin, Ruler, DollarSign, Loader2, AlertCircle, CheckCircle, Edit, Trash2 } from "lucide-react"
 
 // Interfaces de tipos mapeados
 interface Imovel {
@@ -55,6 +55,11 @@ export default function Imoveis() {
   const [limiteAlcada, setLimiteAlcada] = useState("500.00")
   const [inquilinoId, setInquilinoId] = useState("")
   const [proprietarioId, setProprietarioId] = useState("")
+
+  // Estados para Edição e Exclusão
+  const [imovelEditando, setImovelEditando] = useState<Imovel | null>(null)
+  const [imovelParaExcluir, setImovelParaExcluir] = useState<Imovel | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Carrega a listagem de imóveis, inquilinos e proprietários do banco de dados
   const loadData = async () => {
@@ -123,7 +128,7 @@ export default function Imoveis() {
     setCep(valor)
   }
 
-  // Executa o envio do formulário de cadastro de imóvel
+  // Executa o envio do formulário de cadastro/edição de imóvel
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSalvando(true)
@@ -137,32 +142,61 @@ export default function Imoveis() {
     }
 
     try {
-      // Determina qual imobiliária está vinculando o imóvel (usa o ID do usuário conectado)
-      const imobiliariaVinculo = user?.id
+      if (imovelEditando) {
+        // Fluxo de Edição / Atualização de Imóvel
+        const { error } = await supabase
+          .from("imoveis")
+          .update({
+            codigo_imovel: codigoImovel,
+            endereco,
+            bairro,
+            cidade,
+            estado,
+            cep,
+            metragem_m2: metragem ? parseFloat(metragem) : null,
+            limite_alcada_r$: limiteAlcada ? parseFloat(limiteAlcada) : 500.00,
+            inquilino_id: inquilinoId || null,
+            proprietario_id: proprietarioId || null
+          })
+          .eq("id", imovelEditando.id)
 
-      const { error } = await supabase.from("imoveis").insert({
-        imobiliaria_id: imobiliariaVinculo,
-        codigo_imovel: codigoImovel,
-        endereco,
-        bairro,
-        cidade,
-        estado,
-        cep,
-        metragem_m2: metragem ? parseFloat(metragem) : null,
-        limite_alcada_r$: limiteAlcada ? parseFloat(limiteAlcada) : 500.00,
-        inquilino_id: inquilinoId || null,
-        proprietario_id: proprietarioId || null
-      })
-
-      if (error) {
-        if (error.message.includes("unico_codigo_por_imobiliaria")) {
-          throw new Error("Você já possui um imóvel cadastrado com este Código de Identificação.")
+        if (error) {
+          if (error.message.includes("unico_codigo_por_imobiliaria")) {
+            throw new Error("Você já possui um imóvel cadastrado com este Código de Identificação.")
+          }
+          throw error
         }
-        throw error
+
+        setSucesso(`Imóvel "${codigoImovel}" atualizado com sucesso!`)
+        setImovelEditando(null)
+      } else {
+        // Fluxo de Cadastro Original de Imóvel
+        const imobiliariaVinculo = user?.id
+
+        const { error } = await supabase.from("imoveis").insert({
+          imobiliaria_id: imobiliariaVinculo,
+          codigo_imovel: codigoImovel,
+          endereco,
+          bairro,
+          cidade,
+          estado,
+          cep,
+          metragem_m2: metragem ? parseFloat(metragem) : null,
+          limite_alcada_r$: limiteAlcada ? parseFloat(limiteAlcada) : 500.00,
+          inquilino_id: inquilinoId || null,
+          proprietario_id: proprietarioId || null
+        })
+
+        if (error) {
+          if (error.message.includes("unico_codigo_por_imobiliaria")) {
+            throw new Error("Você já possui um imóvel cadastrado com este Código de Identificação.")
+          }
+          throw error
+        }
+
+        setSucesso("Imóvel cadastrado com sucesso!")
       }
 
-      setSucesso("Imóvel cadastrado com sucesso!")
-      
       // Limpa os campos
       setCodigoImovel("")
       setEndereco("")
@@ -184,6 +218,75 @@ export default function Imoveis() {
     }
   }
 
+  // Preenche o formulário para edição do imóvel selecionado
+  const handleEditarClick = (imovel: Imovel) => {
+    setErro(null)
+    setSucesso(null)
+    setImovelEditando(imovel)
+    setCodigoImovel(imovel.codigo_imovel)
+    setEndereco(imovel.endereco)
+    setBairro(imovel.bairro)
+    setCidade(imovel.cidade)
+    setEstado(imovel.estado)
+    setCep(imovel.cep)
+    setMetragem(imovel.metragem_m2 ? imovel.metragem_m2.toString() : "")
+    setLimiteAlcada(imovel.limite_alcada_r$.toString())
+    setInquilinoId(imovel.inquilino_id || "")
+    setProprietarioId(imovel.proprietario_id || "")
+    setFormAberto(true)
+  }
+
+  // Limpa o formulário e cancela o modo de edição
+  const handleCancelarEdicao = () => {
+    setImovelEditando(null)
+    setCodigoImovel("")
+    setEndereco("")
+    setBairro("")
+    setCidade("Curitiba")
+    setEstado("PR")
+    setCep("")
+    setMetragem("")
+    setLimiteAlcada("500.00")
+    setInquilinoId("")
+    setProprietarioId("")
+    setErro(null)
+    setSucesso(null)
+  }
+
+  // Executa a exclusão lógica/física do imóvel
+  const handleConfirmarExclusao = async () => {
+    if (!imovelParaExcluir) return
+
+    try {
+      setDeleting(true)
+      setErro(null)
+      setSucesso(null)
+
+      // Deleta o imóvel diretamente no Supabase (as permissões RLS da Imobiliária permitem)
+      const { error } = await supabase
+        .from("imoveis")
+        .delete()
+        .eq("id", imovelParaExcluir.id)
+
+      if (error) throw error
+
+      setSucesso(`Imóvel "${imovelParaExcluir.codigo_imovel}" excluído com sucesso!`)
+      setImovelParaExcluir(null)
+      
+      // Se o imóvel que estava sendo editado foi excluído, cancela a edição
+      if (imovelEditando && imovelEditando.id === imovelParaExcluir.id) {
+        handleCancelarEdicao()
+      }
+
+      await loadData() // Recarrega a tabela
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro ao tentar excluir o imóvel.")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Cabeçalho */}
@@ -197,7 +300,14 @@ export default function Imoveis() {
           </p>
         </div>
         <Button 
-          onClick={() => setFormAberto(!formAberto)} 
+          onClick={() => {
+            if (formAberto) {
+              handleCancelarEdicao()
+              setFormAberto(false)
+            } else {
+              setFormAberto(true)
+            }
+          }} 
           className="bg-occasio-blue hover:bg-occasio-navy text-white flex gap-2 font-semibold shadow-md shadow-occasio-blue/20"
         >
           <Plus className="h-5 w-5" /> {formAberto ? "Cancelar" : "Cadastrar Imóvel"}
@@ -222,8 +332,14 @@ export default function Imoveis() {
       {formAberto && (
         <Card className="mb-8 border-slate-200 shadow-md">
           <CardHeader className="bg-slate-50 border-b border-slate-200">
-            <CardTitle className="text-occasio-navy">Cadastrar Novo Imóvel</CardTitle>
-            <CardDescription>Preencha os dados abaixo. Itens com asterisco (*) são obrigatórios.</CardDescription>
+            <CardTitle className="text-occasio-navy">
+              {imovelEditando ? "Editar Imóvel" : "Cadastrar Novo Imóvel"}
+            </CardTitle>
+            <CardDescription>
+              {imovelEditando 
+                ? "Altere os dados do imóvel selecionado e clique em Salvar." 
+                : "Preencha os dados abaixo. Itens com asterisco (*) são obrigatórios."}
+            </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -370,11 +486,21 @@ export default function Imoveis() {
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" type="button" onClick={() => setFormAberto(false)}>
+                <Button 
+                  variant="outline" 
+                  type="button" 
+                  onClick={() => {
+                    if (imovelEditando) {
+                      handleCancelarEdicao()
+                    }
+                    setFormAberto(false)
+                  }}
+                >
                   Cancelar
                 </Button>
                 <Button disabled={salvando} type="submit" className="bg-occasio-blue hover:bg-occasio-navy text-white font-semibold">
-                  {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Salvar Cadastro
+                  {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} 
+                  {imovelEditando ? "Salvar Alterações" : "Salvar Cadastro"}
                 </Button>
               </div>
             </form>
@@ -409,6 +535,7 @@ export default function Imoveis() {
                     <th scope="col" className="px-6 py-4">Limite Alçada</th>
                     <th scope="col" className="px-6 py-4">Proprietário</th>
                     <th scope="col" className="px-6 py-4">Inquilino</th>
+                    <th scope="col" className="px-6 py-4 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 border-t border-slate-100">
@@ -431,6 +558,30 @@ export default function Imoveis() {
                       <td className="px-6 py-4 font-medium text-slate-700">
                         {imovel.inquilino?.nome || <span className="text-slate-400 italic">Não vinculado</span>}
                       </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditarClick(imovel)}
+                            className={`h-8 w-8 p-0 text-slate-500 hover:text-occasio-blue hover:bg-slate-100 ${
+                              imovelEditando?.id === imovel.id ? "bg-slate-100 text-occasio-blue" : ""
+                            }`}
+                            title="Editar Imóvel"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setImovelParaExcluir(imovel)}
+                            className="h-8 w-8 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                            title="Excluir Imóvel"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -439,6 +590,54 @@ export default function Imoveis() {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de Confirmação de Exclusão de Imóvel */}
+      {imovelParaExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <Card className="w-full max-w-md border-slate-200 shadow-2xl bg-white overflow-hidden animate-scale-in">
+            <CardHeader className="bg-red-50 border-b border-red-100 pb-4">
+              <div className="flex items-center gap-2 text-red-800">
+                <AlertCircle className="h-5 w-5 text-red-600 animate-pulse" />
+                <CardTitle className="text-lg font-extrabold">Excluir Imóvel</CardTitle>
+              </div>
+              <CardDescription className="text-red-700/80 text-xs font-semibold">
+                Atenção: Esta ação é permanente e não poderá ser desfeita.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+                Você está prestes a excluir a ficha do imóvel <strong className="text-slate-900">{imovelParaExcluir.codigo_imovel}</strong> ({imovelParaExcluir.endereco}). 
+                Isto removerá o imóvel definitivamente do sistema de gestão da imobiliária.
+              </p>
+              
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setImovelParaExcluir(null)}
+                  disabled={deleting}
+                  className="border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleConfirmarExclusao}
+                  disabled={deleting}
+                  className="bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md shadow-red-600/10 text-xs"
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4.5 w-4.5 animate-spin" />
+                      Excluindo...
+                    </>
+                  ) : (
+                    "Confirmar Exclusão"
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
