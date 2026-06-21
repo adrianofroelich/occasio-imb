@@ -69,18 +69,22 @@ function MainLayout() {
           
           {/* Navegação de Links (detecta rota atual para redirecionamento correto) */}
           <nav className="hidden md:flex gap-8 text-sm font-medium text-slate-600 items-center">
-            {isHome ? (
-              <a href="#features" className="hover:text-occasio-blue transition-colors">Funcionalidades</a>
-            ) : (
-              <Link to="/#features" className="hover:text-occasio-blue transition-colors">Funcionalidades</Link>
+            {!user && (
+              <>
+                {isHome ? (
+                  <a href="#features" className="hover:text-occasio-blue transition-colors">Funcionalidades</a>
+                ) : (
+                  <Link to="/#features" className="hover:text-occasio-blue transition-colors">Funcionalidades</Link>
+                )}
+                
+                <Link 
+                  to="/beneficios" 
+                  className={`${location.pathname === "/beneficios" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+                >
+                  Benefícios
+                </Link>
+              </>
             )}
-            
-            <Link 
-              to="/beneficios" 
-              className={`${location.pathname === "/beneficios" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
-            >
-              Benefícios
-            </Link>
 
             {/* Links administrativos exclusivos para Imobiliária ou Super Admin */}
             {(perfil?.perfil === "imobiliaria" || perfil?.perfil === "super_admin") && (
@@ -157,10 +161,12 @@ function MainLayout() {
               </Link>
             )}
             
-            {isHome ? (
-              <a href="#features" className="hover:text-occasio-blue transition-colors">Como Funciona</a>
-            ) : (
-              <Link to="/#features" className="hover:text-occasio-blue transition-colors">Como Funciona</Link>
+            {!user && (
+              isHome ? (
+                <a href="#features" className="hover:text-occasio-blue transition-colors">Como Funciona</a>
+              ) : (
+                <Link to="/#features" className="hover:text-occasio-blue transition-colors">Como Funciona</Link>
+              )
             )}
 
             {!import.meta.env.PROD && (
@@ -197,9 +203,11 @@ function MainLayout() {
                 Entrar
               </Button>
             )}
-            <Button className="bg-occasio-blue hover:bg-occasio-navy text-white shadow-lg shadow-occasio-blue/20 transition-all text-xs sm:text-sm px-3 sm:px-4">
-              Agendar Demo
-            </Button>
+            {!user && (
+              <Button className="bg-occasio-blue hover:bg-occasio-navy text-white shadow-lg shadow-occasio-blue/20 transition-all text-xs sm:text-sm px-3 sm:px-4">
+                Agendar Demo
+              </Button>
+            )}
           </div>
         </div>
       </header>
