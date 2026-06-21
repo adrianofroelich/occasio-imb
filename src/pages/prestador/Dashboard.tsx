@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, Hammer, AlertCircle,
-  User, UserCheck, FileText, ChevronRight
+  User, UserCheck, FileText, ChevronRight, Coins, TrendingUp
 } from "lucide-react"
 
 // Tipagens locais
@@ -46,6 +46,10 @@ interface Chamado {
     id: string
     valor_servico_r$: number
     valor_materiais_r$: number
+    valor_servico_tecnico_r$?: number | null
+    valor_materiais_tecnico_r$?: number | null
+    responsavel_material_tecnico?: 'tecnico' | 'empresa' | null
+    responsavel_material_empresa?: 'empresa' | 'imobiliaria' | 'proprietario' | null
     prazo_execucao_dias: number
     observacoes_tecnicas: string
     homologado_pela_empresa: boolean
@@ -79,12 +83,13 @@ function desformatarMoeda(valorStr: string): number {
 export default function PrestadorDashboard() {
   const { user, perfil } = useAuth()
   
-  // Abas do PWA (orcamentos ou ordens_servico)
-  const [activeTab, setActiveTab] = useState<"orcamentos" | "os">("orcamentos")
+  // Abas do PWA (orcamentos, os, financeiro)
+  const [activeTab, setActiveTab] = useState<"orcamentos" | "os" | "financeiro">("orcamentos")
   
   // Dados das listas
   const [chamadosPendentes, setChamadosPendentes] = useState<Chamado[]>([])
   const [osAtivas, setOsAtivas] = useState<Chamado[]>([])
+  const [financeiroChamados, setFinanceiroChamados] = useState<Chamado[]>([])
   
   // Lista de técnicos da equipe (Empresa PJ)
   const [tecnicosDisponiveis, setTecnicosDisponiveis] = useState<{ id: string; nome: string }[]>([])
@@ -102,6 +107,7 @@ export default function PrestadorDashboard() {
   const [valorMateriais, setValorMateriais] = useState("")
   const [prazo, setPrazo] = useState("")
   const [observacoes, setObservacoes] = useState("")
+  const [responsavelMaterialTecnico, setResponsavelMaterialTecnico] = useState<'tecnico' | 'empresa'>("empresa")
 
   // Empresa PJ: Estados para Delegação
   const [chamadoDelegando, setChamadoDelegando] = useState<Chamado | null>(null)
@@ -114,6 +120,7 @@ export default function PrestadorDashboard() {
   const [homologarValorMateriais, setHomologarValorMateriais] = useState("")
   const [homologarPrazo, setHomologarPrazo] = useState("")
   const [homologarObservacoes, setHomologarObservacoes] = useState("")
+  const [homologarResponsavelMaterialEmpresa, setHomologarResponsavelMaterialEmpresa] = useState<'empresa' | 'imobiliaria' | 'proprietario'>("empresa")
 
   // Técnico: Formulário de Conclusão de OS
   const [chamadoConcluindo, setChamadoConcluindo] = useState<Chamado | null>(null)
@@ -167,12 +174,26 @@ export default function PrestadorDashboard() {
         setChamadosPendentes(pendentesData as unknown as Chamado[] || [])
 
         // 2. Busca OS Ativas delegadas ao técnico ('os_liberada' ou 'em_execucao')
+        // 2. Busca OS Ativas delegadas ao técnico ('os_liberada' ou 'em_execucao')
         const { data: osData, error: osError } = await supabase
           .from("chamados")
           .select(`
             *,
             imovel:imovel_id (codigo_imovel, endereco, bairro),
             inquilino:inquilino_id (nome),
+            orcamentos (
+              id,
+              valor_servico_r$,
+              valor_materiais_r$,
+              valor_servico_tecnico_r$,
+              valor_materiais_tecnico_r$,
+              responsavel_material_tecnico,
+              responsavel_material_empresa,
+              prazo_execucao_dias,
+              observacoes_tecnicas,
+              homologado_pela_empresa,
+              prestador_id
+            ),
             chamados_midias:chamados_midias (*)
           `)
           .eq("tecnico_id", user?.id)
@@ -197,6 +218,10 @@ export default function PrestadorDashboard() {
               id,
               valor_servico_r$,
               valor_materiais_r$,
+              valor_servico_tecnico_r$,
+              valor_materiais_tecnico_r$,
+              responsavel_material_tecnico,
+              responsavel_material_empresa,
               prazo_execucao_dias,
               observacoes_tecnicas,
               homologado_pela_empresa,
@@ -219,6 +244,19 @@ export default function PrestadorDashboard() {
             imovel:imovel_id (codigo_imovel, endereco, bairro),
             inquilino:inquilino_id (nome),
             tecnico:tecnico_id (id, nome),
+            orcamentos (
+              id,
+              valor_servico_r$,
+              valor_materiais_r$,
+              valor_servico_tecnico_r$,
+              valor_materiais_tecnico_r$,
+              responsavel_material_tecnico,
+              responsavel_material_empresa,
+              prazo_execucao_dias,
+              observacoes_tecnicas,
+              homologado_pela_empresa,
+              prestador_id
+            ),
             chamados_midias:chamados_midias (*)
           `)
           .eq("empresa_prestadora_id", user?.id)
@@ -237,6 +275,38 @@ export default function PrestadorDashboard() {
 
         if (tecError) throw tecError
         setTecnicosDisponiveis(tecData || [])
+
+        // 4. Busca dados para o painel financeiro (Empresa PJ)
+        const { data: finData, error: finError } = await supabase
+          .from("chamados")
+          .select(`
+            *,
+            imovel:imovel_id (codigo_imovel, endereco, bairro),
+            inquilino:inquilino_id (nome),
+            tecnico:tecnico_id (id, nome),
+            orcamentos (
+              id,
+              valor_servico_r$,
+              valor_materiais_r$,
+              valor_servico_tecnico_r$,
+              valor_materiais_tecnico_r$,
+              responsavel_material_tecnico,
+              responsavel_material_empresa,
+              homologado_pela_empresa,
+              prestador_id
+            ),
+            chamados_midias:chamados_midias (*)
+          `)
+          .eq("empresa_prestadora_id", user?.id)
+          .order("criado_em", { ascending: false })
+
+        if (finError) throw finError
+        
+        // Filtra para ter apenas chamados que possuem orçamento homologado
+        const chamadosComOrcamento = (finData || []).filter((c: any) => 
+          c.orcamentos && c.orcamentos.some((o: any) => o.homologado_pela_empresa)
+        )
+        setFinanceiroChamados(chamadosComOrcamento as unknown as Chamado[])
       }
 
     } catch (err: any) {
@@ -298,6 +368,10 @@ export default function PrestadorDashboard() {
         .insert({
           chamado_id: chamadoCotando.id,
           prestador_id: user?.id,
+          valor_servico_tecnico_r$: valServico,
+          valor_materiais_tecnico_r$: valMateriais,
+          responsavel_material_tecnico: responsavelMaterialTecnico,
+          // Valores iniciais iguais aos do técnico para manter coerência
           valor_servico_r$: valServico,
           valor_materiais_r$: valMateriais,
           prazo_execucao_dias: parseInt(prazo),
@@ -320,6 +394,7 @@ export default function PrestadorDashboard() {
       setChamadoCotando(null)
       setValorServico("")
       setValorMateriais("")
+      setResponsavelMaterialTecnico("empresa")
       setPrazo("")
       setObservacoes("")
 
@@ -381,6 +456,7 @@ export default function PrestadorDashboard() {
     setHomologarValorMateriais(orcamento.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 }))
     setHomologarPrazo(String(orcamento.prazo_execucao_dias))
     setHomologarObservacoes(orcamento.observacoes_tecnicas || "")
+    setHomologarResponsavelMaterialEmpresa(orcamento.responsavel_material_empresa || "empresa")
   }
 
   // Empresa PJ: Homologa proposta e envia definitivamente para a Imobiliária
@@ -407,6 +483,7 @@ export default function PrestadorDashboard() {
         .update({
           valor_servico_r$: valServico,
           valor_materiais_r$: valMateriais,
+          responsavel_material_empresa: homologarResponsavelMaterialEmpresa,
           prazo_execucao_dias: parseInt(homologarPrazo),
           observacoes_tecnicas: homologarObservacoes,
           homologado_pela_empresa: true
@@ -439,6 +516,7 @@ export default function PrestadorDashboard() {
       setOrcamentoHomologando(null)
       setHomologarValorServico("")
       setHomologarValorMateriais("")
+      setHomologarResponsavelMaterialEmpresa("empresa")
       setHomologarPrazo("")
       setHomologarObservacoes("")
 
@@ -622,7 +700,7 @@ export default function PrestadorDashboard() {
       )}
 
       {/* Abas PWA */}
-      <div className="grid grid-cols-2 gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6">
+      <div className={`grid ${ehTecnico ? 'grid-cols-2' : 'grid-cols-3'} gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6`}>
         <button
           onClick={() => { 
             setActiveTab("orcamentos")
@@ -637,7 +715,7 @@ export default function PrestadorDashboard() {
               : "text-slate-500 hover:text-slate-800"
           }`}
         >
-          Orçamentos Pendentes ({chamadosPendentes.length})
+          Orçamentos ({chamadosPendentes.length})
         </button>
         <button
           onClick={() => { 
@@ -655,6 +733,24 @@ export default function PrestadorDashboard() {
         >
           OS Ativas ({osAtivas.length})
         </button>
+        {!ehTecnico && (
+          <button
+            onClick={() => { 
+              setActiveTab("financeiro")
+              setChamadoCotando(null)
+              setChamadoConcluindo(null)
+              setChamadoDelegando(null)
+              setChamadoHomologando(null)
+            }}
+            className={`py-2 text-xs font-bold rounded-md transition-all ${
+              activeTab === "financeiro" 
+                ? "bg-white text-occasio-navy shadow-sm" 
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Financeiro
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -885,6 +981,20 @@ export default function PrestadorDashboard() {
 
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Quem pagará/providenciará os materiais? *
+                    </label>
+                    <select
+                      value={responsavelMaterialTecnico}
+                      onChange={(e) => setResponsavelMaterialTecnico(e.target.value as 'tecnico' | 'empresa')}
+                      className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue mb-1"
+                    >
+                      <option value="empresa">Prestador (Empresa PJ paga/fornece os materiais)</option>
+                      <option value="tecnico">Técnico (Eu pago/providencio os materiais)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                       Prazo de Execução (em dias) *
                     </label>
                     <Input
@@ -1050,8 +1160,9 @@ export default function PrestadorDashboard() {
 
                     <div className="text-[11px] leading-relaxed pt-2 border-t border-slate-200">
                       <strong>Dados Originais do Técnico:</strong><br/>
-                      Mão de Obra Original: R$ {orcamentoHomologando.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
-                      Materiais Original: R$ {orcamentoHomologando.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                      Mão de Obra Original: R$ {(orcamentoHomologando.valor_servico_tecnico_r$ || orcamentoHomologando.valor_servico_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                      Materiais Original: R$ {(orcamentoHomologando.valor_materiais_tecnico_r$ || orcamentoHomologando.valor_materiais_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                      Responsável Material: <span className="font-semibold text-slate-800">{orcamentoHomologando.responsavel_material_tecnico === 'tecnico' ? "Técnico (PF)" : "Empresa (PJ)"}</span><br/>
                       Observações de Campo: <span className="italic">&ldquo;{orcamentoHomologando.observacoes_tecnicas || "Nenhuma"}&rdquo;</span>
                     </div>
                   </div>
@@ -1094,6 +1205,31 @@ export default function PrestadorDashboard() {
                           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHomologarValorMateriais(formatarMoedaInput(e.target.value))}
                         />
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Material indicado pelo Técnico
+                      </label>
+                      <div className="h-9 px-3 border border-slate-100 rounded-md bg-slate-50 flex items-center text-xs font-bold text-slate-700 select-none">
+                        {orcamentoHomologando.responsavel_material_tecnico === 'tecnico' ? "Técnico paga" : "Empresa PJ paga"}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Faturar Materiais para *
+                      </label>
+                      <select
+                        value={homologarResponsavelMaterialEmpresa}
+                        onChange={(e) => setHomologarResponsavelMaterialEmpresa(e.target.value as 'empresa' | 'imobiliaria' | 'proprietario')}
+                        className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                      >
+                        <option value="empresa">Empresa PJ (Nós assumimos/pagamos)</option>
+                        <option value="imobiliaria">Imobiliária</option>
+                        <option value="proprietario">Proprietário do Imóvel</option>
+                      </select>
                     </div>
                   </div>
 
@@ -1337,6 +1473,183 @@ export default function PrestadorDashboard() {
           )}
         </>
       )}
+
+      {/* ======================== ABA 3: PAINEL FINANCEIRO (PJ) ======================== */}
+      {activeTab === "financeiro" && !ehTecnico && (() => {
+        // Cálculos financeiros gerais
+        const totalReceber = financeiroChamados.reduce((acc, chamado) => {
+          const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+          if (!orc) return acc
+          const matReceber = orc.responsavel_material_empresa === 'empresa' ? orc.valor_materiais_r$ : 0
+          return acc + orc.valor_servico_r$ + matReceber
+        }, 0)
+
+        const totalPagar = financeiroChamados.reduce((acc, chamado) => {
+          const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+          if (!orc) return acc
+          const matPagar = orc.responsavel_material_tecnico === 'tecnico' ? (orc.valor_materiais_tecnico_r$ || 0) : 0
+          return acc + (orc.valor_servico_tecnico_r$ || 0) + matPagar
+        }, 0)
+
+        const margemLucro = totalReceber - totalPagar
+
+        return (
+          <div className="space-y-6">
+            {/* Cards de Resumo */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[9px] font-bold uppercase tracking-wider">A Receber</span>
+                  <Coins className="h-3.5 w-3.5 text-green-500" />
+                </div>
+                <div className="mt-2">
+                  <span className="text-xs font-bold text-slate-800">R$ {totalReceber.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[9px] font-bold uppercase tracking-wider">A Pagar</span>
+                  <User className="h-3.5 w-3.5 text-blue-500" />
+                </div>
+                <div className="mt-2">
+                  <span className="text-xs font-bold text-slate-800">R$ {totalPagar.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[9px] font-bold uppercase tracking-wider">Lucro Est.</span>
+                  <TrendingUp className="h-3.5 w-3.5 text-occasio-blue" />
+                </div>
+                <div className="mt-2">
+                  <span className={`text-xs font-extrabold ${margemLucro >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    R$ {margemLucro.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de Chamados no Financeiro */}
+            <div className="space-y-4">
+              {financeiroChamados.length === 0 ? (
+                <div className="text-center py-16 text-slate-400 bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center gap-3">
+                  <Coins className="h-10 w-10 text-slate-300" />
+                  <div className="font-semibold text-slate-500">Nenhum registro financeiro</div>
+                  <p className="max-w-xs mx-auto text-[11px] text-slate-400">
+                    Os chamados homologados aparecerão aqui para controle de custos e faturamento.
+                  </p>
+                </div>
+              ) : (
+                financeiroChamados.map((chamado) => {
+                  const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+                  if (!orc) return null
+
+                  const matReceber = orc.responsavel_material_empresa === 'empresa' ? orc.valor_materiais_r$ : 0
+                  const recTotal = orc.valor_servico_r$ + matReceber
+
+                  const matPagar = orc.responsavel_material_tecnico === 'tecnico' ? (orc.valor_materiais_tecnico_r$ || 0) : 0
+                  const pagTotal = (orc.valor_servico_tecnico_r$ || 0) + matPagar
+
+                  const lucroItem = recTotal - pagTotal
+
+                  // Status amigável
+                  let statusColor = "bg-slate-100 text-slate-700"
+                  let statusTexto = chamado.status as string
+                  if (chamado.status === "orcamento_recebido") {
+                    statusColor = "bg-yellow-50 text-yellow-800 border-yellow-200"
+                    statusTexto = "Em Análise"
+                  } else if (chamado.status === "os_liberada" || chamado.status === "em_execucao") {
+                    statusColor = "bg-teal-50 text-teal-800 border-teal-200"
+                    statusTexto = "Em Execução"
+                  } else if (chamado.status === "servico_concluido" || chamado.status === "encerrado") {
+                    statusColor = "bg-green-50 text-green-800 border-green-200"
+                    statusTexto = "Finalizado"
+                  }
+
+                  return (
+                    <Card key={chamado.id} className="border-slate-200 shadow-sm bg-white">
+                      <CardContent className="p-4 space-y-3 text-xs">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                              {chamado.imovel?.codigo_imovel || "Sem Código"}
+                            </span>
+                            <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
+                          </div>
+                          <Badge className={`${statusColor} border text-[9px] font-bold uppercase`}>
+                            {statusTexto}
+                          </Badge>
+                        </div>
+
+                        <div className="text-[10px] text-slate-500 flex justify-between items-center bg-slate-50 p-2 rounded">
+                          <span>Técnico Responsável: <strong>{chamado.tecnico?.nome || "Não atribuído"}</strong></span>
+                          <span>Prazo: <strong>{orc.prazo_execucao_dias} dias</strong></span>
+                        </div>
+
+                        {/* Detalhamento Financeiro */}
+                        <div className="grid grid-cols-2 gap-3 text-[11px] pt-1">
+                          {/* Bloco Cliente */}
+                          <div className="bg-slate-50/50 p-2.5 rounded border border-slate-100 space-y-1">
+                            <span className="block font-bold text-[9px] text-slate-500 uppercase">Imobiliária (A Receber)</span>
+                            <div className="flex justify-between">
+                              <span>Mão de Obra:</span>
+                              <span className="font-semibold">R$ {orc.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Materiais:</span>
+                              <span className="font-semibold text-slate-600">
+                                R$ {orc.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="text-[9px] text-slate-400 italic">
+                              Pago por: {orc.responsavel_material_empresa === 'empresa' ? "Empresa (Nós)" : orc.responsavel_material_empresa === 'imobiliaria' ? "Imobiliária" : "Proprietário"}
+                            </div>
+                            <div className="flex justify-between border-t border-dashed pt-1 font-bold text-slate-800">
+                              <span>Total:</span>
+                              <span>R$ {recTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
+
+                          {/* Bloco Técnico */}
+                          <div className="bg-slate-50/50 p-2.5 rounded border border-slate-100 space-y-1">
+                            <span className="block font-bold text-[9px] text-slate-500 uppercase">Técnico (A Pagar)</span>
+                            <div className="flex justify-between">
+                              <span>Mão de Obra:</span>
+                              <span className="font-semibold">R$ {(orc.valor_servico_tecnico_r$ || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Materiais:</span>
+                              <span className="font-semibold text-slate-600">
+                                R$ {(orc.valor_materiais_tecnico_r$ || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="text-[9px] text-slate-400 italic">
+                              Comprado por: {orc.responsavel_material_tecnico === 'tecnico' ? "Técnico" : "Empresa (Nós)"}
+                            </div>
+                            <div className="flex justify-between border-t border-dashed pt-1 font-bold text-slate-800">
+                              <span>Total:</span>
+                              <span>R$ {pagTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Lucro Item */}
+                        <div className="flex justify-between items-center border-t border-slate-100 pt-2 text-xs">
+                          <span className="font-semibold text-slate-500">Resultado Líquido / Margem:</span>
+                          <span className={`font-extrabold ${lucroItem >= 0 ? "text-green-600" : "text-red-600"}`}>
+                            {lucroItem >= 0 ? "+" : ""} R$ {lucroItem.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Modal para ampliação de imagens (Lightbox) */}
       {imagemZoom && (
