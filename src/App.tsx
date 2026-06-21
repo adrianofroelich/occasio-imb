@@ -52,11 +52,11 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   }
 
   if (!user || !perfil) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/login" replace />
   }
 
   if (allowedRoles && !allowedRoles.includes(perfil.perfil)) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/login" replace />
   }
 
   return <>{children}</>
@@ -95,12 +95,20 @@ function MainLayout() {
           {/* Navegação de Links (detecta rota atual para redirecionamento correto) */}
           <nav className="hidden md:flex gap-8 text-sm font-medium text-slate-600 items-center">
             {!user && (
-              <Link 
-                to="/beneficios" 
-                className={`${location.pathname === "/beneficios" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
-              >
-                Benefícios
-              </Link>
+              <>
+                {isHome ? (
+                  <a href="#features" className="hover:text-occasio-blue transition-colors">Funcionalidades</a>
+                ) : (
+                  <Link to="/#features" className="hover:text-occasio-blue transition-colors">Funcionalidades</Link>
+                )}
+                
+                <Link 
+                  to="/beneficios" 
+                  className={`${location.pathname === "/beneficios" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+                >
+                  Benefícios
+                </Link>
+              </>
             )}
 
             {/* Links administrativos exclusivos para Imobiliária ou Super Admin */}
@@ -176,6 +184,14 @@ function MainLayout() {
               >
                 Painel Admin
               </Link>
+            )}
+            
+            {!user && (
+              isHome ? (
+                <a href="#features" className="hover:text-occasio-blue transition-colors">Como Funciona</a>
+              ) : (
+                <Link to="/#features" className="hover:text-occasio-blue transition-colors">Como Funciona</Link>
+              )
             )}
 
             {!import.meta.env.PROD && (
