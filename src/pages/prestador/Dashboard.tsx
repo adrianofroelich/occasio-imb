@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, Hammer, AlertCircle,
-  User, UserCheck, FileText, ChevronRight, Coins, TrendingUp
+  User, UserCheck, FileText, Coins, TrendingUp
 } from "lucide-react"
 
 // Tipagens locais
@@ -1286,85 +1286,217 @@ export default function PrestadorDashboard() {
                   </p>
                 </div>
               ) : (
-                osAtivas.map((chamado) => (
-                  <Card key={chamado.id} className="border-slate-200 shadow-sm bg-white">
-                    <CardContent className="p-4 space-y-3 text-xs">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                            {chamado.imovel?.codigo_imovel || "Sem Código"}
-                          </span>
-                          <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
-                        </div>
-                        <Badge className={`${
-                          chamado.status === 'os_liberada' 
-                            ? "bg-teal-50 text-teal-800 border-teal-200" 
-                            : "bg-orange-50 text-orange-800 border-orange-200"
-                        } border text-[9px] font-bold uppercase`}>
-                          {chamado.status === 'os_liberada' ? "Liberada" : "Em Execução"}
-                        </Badge>
-                      </div>
-                      
-                      <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
-                        <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})</div>
-                        <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
-                        {!ehTecnico && chamado.tecnico && (
-                          <div className="pt-1 border-t border-slate-200 mt-1 flex items-center gap-1 text-slate-700">
-                            <User className="h-3 w-3 text-slate-400" />
-                            Responsável: <strong className="text-slate-800">{chamado.tecnico.nome}</strong>
-                          </div>
-                        )}
-                      </div>
+                (() => {
+                  // Se for técnico, exibe listagem simples com as ações
+                  if (ehTecnico) {
+                    return (
+                      <div className="space-y-4">
+                        {osAtivas.map((chamado) => (
+                          <Card key={chamado.id} className="border-slate-200 shadow-sm bg-white">
+                            <CardContent className="p-4 space-y-3 text-xs">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                                    {chamado.imovel?.codigo_imovel || "Sem Código"}
+                                  </span>
+                                  <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
+                                </div>
+                                <Badge className={`${
+                                  chamado.status === 'os_liberada' 
+                                    ? "bg-teal-50 text-teal-800 border-teal-200" 
+                                    : "bg-orange-50 text-orange-800 border-orange-200"
+                                } border text-[9px] font-bold uppercase`}>
+                                  {chamado.status === 'os_liberada' ? "Liberada" : "Em Execução"}
+                                </Badge>
+                              </div>
+                              
+                              <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
+                                <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})</div>
+                                <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
+                              </div>
 
-                      {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
-                      {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
-                        <div className="mt-2">
-                          <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
-                          <div className="flex gap-2 overflow-x-auto pb-1">
-                            {chamado.chamados_midias
-                              .filter(m => m.tipo_midia === 'antes')
-                              .map(midia => (
-                                <img 
-                                  key={midia.id} 
-                                  src={midia.url_storage} 
-                                  alt="Foto do Problema" 
-                                  onClick={() => setImagemZoom(midia.url_storage)}
-                                  className="h-14 w-14 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
-                                />
-                              ))}
+                              {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
+                              {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
+                                <div className="mt-2">
+                                  <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
+                                  <div className="flex gap-2 overflow-x-auto pb-1">
+                                    {chamado.chamados_midias
+                                      .filter(m => m.tipo_midia === 'antes')
+                                      .map(midia => (
+                                        <img 
+                                          key={midia.id} 
+                                          src={midia.url_storage} 
+                                          alt="Foto do Problema" 
+                                          onClick={() => setImagemZoom(midia.url_storage)}
+                                          className="h-14 w-14 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                                        />
+                                      ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
+                                {chamado.status === 'os_liberada' ? (
+                                  <Button 
+                                    onClick={() => handleIniciarServico(chamado)} 
+                                    size="sm" 
+                                    className="bg-teal-600 hover:bg-teal-700 text-white font-bold h-8 text-[11px]"
+                                  >
+                                    Iniciar Execução
+                                  </Button>
+                                ) : (
+                                  <Button 
+                                    onClick={() => setChamadoConcluindo(chamado)} 
+                                    size="sm" 
+                                    className="bg-green-600 hover:bg-green-700 text-white font-bold h-8 text-[11px]"
+                                  >
+                                    Concluir Conserto
+                                  </Button>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )
+                  }
+
+                  // Se for gestor/dono PJ, exibe em sub-seções estruturadas para rastreamento
+                  const osLiberadas = osAtivas.filter(c => c.status === 'os_liberada')
+                  const osEmExecucao = osAtivas.filter(c => c.status === 'em_execucao')
+
+                  return (
+                    <div className="space-y-6">
+                      {/* 1. OS Designadas (Aguardando Início do Técnico) */}
+                      {osLiberadas.length > 0 && (
+                        <div className="space-y-3">
+                          <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 pl-1">
+                            <span className="h-2 w-2 rounded-full bg-teal-500 animate-pulse"></span>
+                            Aguardando Início do Técnico ({osLiberadas.length})
+                          </h4>
+                          <div className="space-y-4">
+                            {osLiberadas.map((chamado) => (
+                              <Card key={chamado.id} className="border-slate-200 shadow-sm bg-white border-l-4 border-l-teal-500">
+                                <CardContent className="p-4 space-y-3 text-xs">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                                        {chamado.imovel?.codigo_imovel || "Sem Código"}
+                                      </span>
+                                      <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
+                                    </div>
+                                    <Badge className="bg-teal-50 text-teal-800 border-teal-200 border text-[9px] font-bold uppercase">
+                                      Liberada
+                                    </Badge>
+                                  </div>
+                                  
+                                  <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
+                                    <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})</div>
+                                    <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
+                                    {chamado.tecnico && (
+                                      <div className="pt-1 border-t border-slate-200 mt-1 flex items-center gap-1 text-slate-700">
+                                        <User className="h-3 w-3 text-slate-400" />
+                                        Técnico Responsável: <strong className="text-slate-800">{chamado.tecnico.nome}</strong>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
+                                  {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
+                                    <div className="mt-2">
+                                      <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
+                                      <div className="flex gap-2 overflow-x-auto pb-1">
+                                        {chamado.chamados_midias
+                                          .filter(m => m.tipo_midia === 'antes')
+                                          .map(midia => (
+                                            <img 
+                                              key={midia.id} 
+                                              src={midia.url_storage} 
+                                              alt="Foto do Problema" 
+                                              onClick={() => setImagemZoom(midia.url_storage)}
+                                              className="h-14 w-14 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                                            />
+                                          ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div className="bg-teal-50/50 border border-teal-100 text-teal-800 text-[10px] p-2 rounded font-semibold mt-1">
+                                    A OS foi enviada e recebida no PWA do Técnico {chamado.tecnico?.nome || "designado"}. Aguardando o início do serviço no local.
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))}
                           </div>
                         </div>
                       )}
 
-                      {ehTecnico ? (
-                        <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
-                          {chamado.status === 'os_liberada' ? (
-                            <Button 
-                              onClick={() => handleIniciarServico(chamado)} 
-                              size="sm" 
-                              className="bg-teal-600 hover:bg-teal-700 text-white font-bold h-8 text-[11px]"
-                            >
-                              Iniciar Execução
-                            </Button>
-                          ) : (
-                            <Button 
-                              onClick={() => setChamadoConcluindo(chamado)} 
-                              size="sm" 
-                              className="bg-green-600 hover:bg-green-700 text-white font-bold h-8 text-[11px]"
-                            >
-                              Concluir Conserto
-                            </Button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-right font-medium text-slate-400 border-t border-slate-100 pt-2 flex items-center justify-end gap-1.5">
-                          <span>Acompanhamento PWA</span>
-                          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+                      {/* 2. OS Em Execução */}
+                      {osEmExecucao.length > 0 && (
+                        <div className="space-y-3">
+                          <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 pl-1">
+                            <span className="h-2 w-2 rounded-full bg-orange-500 animate-pulse"></span>
+                            Em Execução no Local ({osEmExecucao.length})
+                          </h4>
+                          <div className="space-y-4">
+                            {osEmExecucao.map((chamado) => (
+                              <Card key={chamado.id} className="border-slate-200 shadow-sm bg-white border-l-4 border-l-orange-500">
+                                <CardContent className="p-4 space-y-3 text-xs">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                                        {chamado.imovel?.codigo_imovel || "Sem Código"}
+                                      </span>
+                                      <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
+                                    </div>
+                                    <Badge className="bg-orange-50 text-orange-800 border-orange-200 border text-[9px] font-bold uppercase">
+                                      Em Execução
+                                    </Badge>
+                                  </div>
+                                  
+                                  <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
+                                    <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})</div>
+                                    <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
+                                    {chamado.tecnico && (
+                                      <div className="pt-1 border-t border-slate-200 mt-1 flex items-center gap-1 text-slate-700">
+                                        <User className="h-3 w-3 text-slate-400" />
+                                        Técnico Responsável: <strong className="text-slate-800">{chamado.tecnico.nome}</strong>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
+                                  {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
+                                    <div className="mt-2">
+                                      <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
+                                      <div className="flex gap-2 overflow-x-auto pb-1">
+                                        {chamado.chamados_midias
+                                          .filter(m => m.tipo_midia === 'antes')
+                                          .map(midia => (
+                                            <img 
+                                              key={midia.id} 
+                                              src={midia.url_storage} 
+                                              alt="Foto do Problema" 
+                                              onClick={() => setImagemZoom(midia.url_storage)}
+                                              className="h-14 w-14 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                                            />
+                                          ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div className="bg-orange-50/50 border border-orange-100 text-orange-800 text-[10px] p-2 rounded font-semibold mt-1">
+                                    O Técnico {chamado.tecnico?.nome || "designado"} iniciou a execução do serviço no local neste momento.
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
                         </div>
                       )}
-                    </CardContent>
-                  </Card>
-                ))
+                    </div>
+                  )
+                })()
               )}
             </div>
           )}
