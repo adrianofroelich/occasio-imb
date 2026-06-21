@@ -658,33 +658,35 @@ export default function ProprietarioDashboard() {
                 )}
 
                 {/* Ações */}
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
+                {chamadoAtivo.status === 'analise_proprietario' && (
+                  <div className="pt-2 border-t border-slate-100 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        onClick={handleAprovar}
+                        disabled={salvando}
+                        className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs h-9 flex items-center gap-1"
+                      >
+                        <CheckCircle2 className="h-4 w-4" /> Aprovar
+                      </Button>
+                      <Button
+                        onClick={handleReprovar}
+                        disabled={salvando}
+                        variant="destructive"
+                        className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs h-9 flex items-center gap-1"
+                      >
+                        <XCircle className="h-4 w-4" /> Reprovar
+                      </Button>
+                    </div>
                     <Button
-                      onClick={handleAprovar}
+                      onClick={() => setMostrarModalEsclarecimento(true)}
                       disabled={salvando}
-                      className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs h-9 flex items-center gap-1"
+                      variant="outline"
+                      className="w-full border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-xs h-9 flex items-center gap-1.5 justify-center"
                     >
-                      <CheckCircle2 className="h-4 w-4" /> Aprovar
-                    </Button>
-                    <Button
-                      onClick={handleReprovar}
-                      disabled={salvando}
-                      variant="destructive"
-                      className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs h-9 flex items-center gap-1"
-                    >
-                      <XCircle className="h-4 w-4" /> Reprovar
+                      <MessageSquare className="h-3.5 w-3.5" /> Solicitar Esclarecimentos
                     </Button>
                   </div>
-                  <Button
-                    onClick={() => setMostrarModalEsclarecimento(true)}
-                    disabled={salvando}
-                    variant="outline"
-                    className="w-full border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-xs h-9 flex items-center gap-1.5 justify-center"
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" /> Solicitar Esclarecimentos
-                  </Button>
-                </div>
+                )}
 
               </CardContent>
             </Card>
