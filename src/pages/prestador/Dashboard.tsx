@@ -51,6 +51,11 @@ interface Chamado {
     homologado_pela_empresa: boolean
     prestador_id: string
   }[]
+  chamados_midias?: {
+    id: string
+    url_storage: string
+    tipo_midia: 'antes' | 'depois'
+  }[]
 }
 
 // Funções auxiliares para formatação de moeda brasileira (pt-BR)
@@ -117,6 +122,9 @@ export default function PrestadorDashboard() {
   const [imagemPreview, setImagemPreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Estado para ampliar foto do problema / visualização de mídia
+  const [imagemZoom, setImagemZoom] = useState<string | null>(null)
+
   // Verifica se é perfil de Técnico (pertence a uma Empresa Mãe) ou Empresa PJ (é conta-mãe)
   const ehTecnico = !!perfil?.empresa_mae_id
 
@@ -143,7 +151,8 @@ export default function PrestadorDashboard() {
           .select(`
             *,
             imovel:imovel_id (codigo_imovel, endereco, bairro),
-            inquilino:inquilino_id (nome)
+            inquilino:inquilino_id (nome),
+            chamados_midias:chamados_midias (*)
           `)
           .eq("tecnico_id", user?.id)
           .eq("status", "aguardando_orcamento")
@@ -163,7 +172,8 @@ export default function PrestadorDashboard() {
           .select(`
             *,
             imovel:imovel_id (codigo_imovel, endereco, bairro),
-            inquilino:inquilino_id (nome)
+            inquilino:inquilino_id (nome),
+            chamados_midias:chamados_midias (*)
           `)
           .eq("tecnico_id", user?.id)
           .in("status", ["os_liberada", "em_execucao"])
@@ -191,7 +201,8 @@ export default function PrestadorDashboard() {
               observacoes_tecnicas,
               homologado_pela_empresa,
               prestador_id
-            )
+            ),
+            chamados_midias:chamados_midias (*)
           `)
           .eq("empresa_prestadora_id", user?.id)
           .eq("status", "aguardando_orcamento")
@@ -207,7 +218,8 @@ export default function PrestadorDashboard() {
             *,
             imovel:imovel_id (codigo_imovel, endereco, bairro),
             inquilino:inquilino_id (nome),
-            tecnico:tecnico_id (id, nome)
+            tecnico:tecnico_id (id, nome),
+            chamados_midias:chamados_midias (*)
           `)
           .eq("empresa_prestadora_id", user?.id)
           .in("status", ["os_liberada", "em_execucao"])
@@ -702,6 +714,26 @@ export default function PrestadorDashboard() {
                         </div>
                         <p className="text-slate-500 line-clamp-2 leading-relaxed">{chamado.descricao_problema}</p>
                         
+                        {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
+                        {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
+                          <div className="mt-1">
+                            <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
+                            <div className="flex gap-2 overflow-x-auto pb-1">
+                              {chamado.chamados_midias
+                                .filter(m => m.tipo_midia === 'antes')
+                                .map(midia => (
+                                  <img 
+                                    key={midia.id} 
+                                    src={midia.url_storage} 
+                                    alt="Foto do Problema" 
+                                    onClick={() => setImagemZoom(midia.url_storage)}
+                                    className="h-14 w-14 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                                  />
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                        
                         <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded border border-slate-100 text-[11px] text-slate-600">
                           <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"}</div>
                           {!ehTecnico && chamado.tecnico && (
@@ -779,6 +811,26 @@ export default function PrestadorDashboard() {
                   <div className="p-3 bg-slate-50 rounded border text-xs text-slate-600 mb-2">
                     <strong>Descrição do Problema:</strong>
                     <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoCotando.descricao_problema}</p>
+                    
+                    {/* Foto do problema se houver */}
+                    {chamadoCotando.chamados_midias && chamadoCotando.chamados_midias.some(m => m.tipo_midia === 'antes') && (
+                      <div className="mt-3">
+                        <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {chamadoCotando.chamados_midias
+                            .filter(m => m.tipo_midia === 'antes')
+                            .map(midia => (
+                              <img 
+                                key={midia.id} 
+                                src={midia.url_storage} 
+                                alt="Foto do Problema" 
+                                onClick={() => setImagemZoom(midia.url_storage)}
+                                className="h-16 w-16 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                              />
+                            ))}
+                        </div>
+                      </div>
+                    )}
                     
                     <div className="mt-3 bg-amber-50 border border-amber-200 rounded-md p-3 text-amber-900">
                       <span className="block text-[10px] font-bold text-amber-800 uppercase tracking-wide mb-0.5">
@@ -882,12 +934,39 @@ export default function PrestadorDashboard() {
               </CardHeader>
               <CardContent className="p-4">
                 <form onSubmit={handleDelegarChamado} className="space-y-4">
-                  <div className="p-3 bg-slate-50 rounded border text-xs text-slate-600 mb-2">
-                    <strong>Localização &amp; Horário:</strong>
-                    <p className="mt-1 leading-relaxed">
-                      Endereço: <strong>{chamadoDelegando.imovel.endereco}</strong><br/>
-                      Preferência: <strong className="text-amber-700 font-extrabold">{chamadoDelegando.disponibilidade_atendimento}</strong>
-                    </p>
+                  <div className="p-3 bg-slate-50 rounded border text-xs text-slate-600 mb-2 space-y-2">
+                    <div>
+                      <strong>Descrição do Problema:</strong>
+                      <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoDelegando.descricao_problema}</p>
+                    </div>
+
+                    {/* Foto do problema se houver */}
+                    {chamadoDelegando.chamados_midias && chamadoDelegando.chamados_midias.some(m => m.tipo_midia === 'antes') && (
+                      <div>
+                        <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {chamadoDelegando.chamados_midias
+                            .filter(m => m.tipo_midia === 'antes')
+                            .map(midia => (
+                              <img 
+                                key={midia.id} 
+                                src={midia.url_storage} 
+                                alt="Foto do Problema" 
+                                onClick={() => setImagemZoom(midia.url_storage)}
+                                className="h-16 w-16 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                              />
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <strong>Localização &amp; Horário:</strong>
+                      <p className="mt-1 leading-relaxed">
+                        Endereço: <strong>{chamadoDelegando.imovel.endereco}</strong><br/>
+                        Preferência: <strong className="text-amber-700 font-extrabold">{chamadoDelegando.disponibilidade_atendimento}</strong>
+                      </p>
+                    </div>
                   </div>
 
                   <div>
@@ -943,11 +1022,38 @@ export default function PrestadorDashboard() {
               </CardHeader>
               <CardContent className="p-4">
                 <form onSubmit={handleHomologarOrcamento} className="space-y-4">
-                  <div className="p-3 bg-slate-50 rounded border text-[11px] text-slate-600 mb-2 leading-relaxed">
-                    <strong>Dados Originais do Técnico:</strong><br/>
-                    Mão de Obra Original: R$ {orcamentoHomologando.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
-                    Materiais Original: R$ {orcamentoHomologando.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
-                    Observações de Campo: <span className="italic">&ldquo;{orcamentoHomologando.observacoes_tecnicas || "Nenhuma"}&rdquo;</span>
+                  <div className="p-3 bg-slate-50 rounded border text-xs text-slate-600 mb-2 space-y-2">
+                    <div>
+                      <strong>Descrição do Problema:</strong>
+                      <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoHomologando.descricao_problema}</p>
+                    </div>
+
+                    {/* Foto do problema se houver */}
+                    {chamadoHomologando.chamados_midias && chamadoHomologando.chamados_midias.some(m => m.tipo_midia === 'antes') && (
+                      <div>
+                        <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {chamadoHomologando.chamados_midias
+                            .filter(m => m.tipo_midia === 'antes')
+                            .map(midia => (
+                              <img 
+                                key={midia.id} 
+                                src={midia.url_storage} 
+                                alt="Foto do Problema" 
+                                onClick={() => setImagemZoom(midia.url_storage)}
+                                className="h-16 w-16 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                              />
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="text-[11px] leading-relaxed pt-2 border-t border-slate-200">
+                      <strong>Dados Originais do Técnico:</strong><br/>
+                      Mão de Obra Original: R$ {orcamentoHomologando.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                      Materiais Original: R$ {orcamentoHomologando.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                      Observações de Campo: <span className="italic">&ldquo;{orcamentoHomologando.observacoes_tecnicas || "Nenhuma"}&rdquo;</span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -1074,6 +1180,26 @@ export default function PrestadorDashboard() {
                         )}
                       </div>
 
+                      {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
+                      {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
+                        <div className="mt-2">
+                          <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
+                          <div className="flex gap-2 overflow-x-auto pb-1">
+                            {chamado.chamados_midias
+                              .filter(m => m.tipo_midia === 'antes')
+                              .map(midia => (
+                                <img 
+                                  key={midia.id} 
+                                  src={midia.url_storage} 
+                                  alt="Foto do Problema" 
+                                  onClick={() => setImagemZoom(midia.url_storage)}
+                                  className="h-14 w-14 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                                />
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
                       {ehTecnico ? (
                         <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
                           {chamado.status === 'os_liberada' ? (
@@ -1116,6 +1242,33 @@ export default function PrestadorDashboard() {
               </CardHeader>
               <CardContent className="p-4">
                 <form onSubmit={handleConcluirServico} className="space-y-4">
+                  <div className="p-3 bg-slate-50 rounded border text-xs text-slate-600 space-y-2">
+                    <div>
+                      <strong>Descrição do Problema:</strong>
+                      <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoConcluindo.descricao_problema}</p>
+                    </div>
+                    
+                    {/* Foto do problema se houver */}
+                    {chamadoConcluindo.chamados_midias && chamadoConcluindo.chamados_midias.some(m => m.tipo_midia === 'antes') && (
+                      <div>
+                        <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema (Antes):</span>
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {chamadoConcluindo.chamados_midias
+                            .filter(m => m.tipo_midia === 'antes')
+                            .map(midia => (
+                              <img 
+                                key={midia.id} 
+                                src={midia.url_storage} 
+                                alt="Foto do Problema Antes" 
+                                onClick={() => setImagemZoom(midia.url_storage)}
+                                className="h-16 w-16 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                              />
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                       Relatório Técnico de Conclusão *
@@ -1183,6 +1336,25 @@ export default function PrestadorDashboard() {
             </Card>
           )}
         </>
+      )}
+
+      {/* Modal para ampliação de imagens (Lightbox) */}
+      {imagemZoom && (
+        <div 
+          className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center p-4 cursor-zoom-out"
+          onClick={() => setImagemZoom(null)}
+        >
+          <div className="relative max-w-full max-h-full">
+            <img 
+              src={imagemZoom} 
+              alt="Foto ampliada" 
+              className="max-w-[95vw] max-h-[90vh] rounded-lg shadow-2xl object-contain" 
+            />
+            <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded font-bold">
+              Clique em qualquer lugar para fechar
+            </span>
+          </div>
+        </div>
       )}
     </div>
   )
