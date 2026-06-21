@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { 
   ShieldAlert, Loader2, KeyRound, Mail, 
-  MessageSquare, Sparkles 
+  MessageSquare, Sparkles, Eye, EyeOff 
 } from "lucide-react"
 
 export default function Login() {
@@ -18,6 +18,7 @@ export default function Login() {
   // Estados do formulário
   const [email, setEmail] = useState("")
   const [senha, setSenha] = useState("")
+  const [verSenha, setVerSenha] = useState(false)
 
   // Estados operacionais
   const [loading, setLoading] = useState(false)
@@ -230,7 +231,7 @@ export default function Login() {
                     </div>
                   </div>
 
-                  <div className="space-y-1">
+                   <div className="space-y-1">
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                       Senha
                     </label>
@@ -239,14 +240,22 @@ export default function Login() {
                         <KeyRound className="h-4 w-4" />
                       </span>
                       <Input
-                        type="password"
+                        type={verSenha ? "text" : "password"}
                         placeholder="Digite sua senha"
-                        className="pl-9 pr-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-occasio-blue h-9"
+                        className="pl-9 pr-10 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-occasio-blue h-9"
                         value={senha}
                         onChange={(e) => setSenha(e.target.value)}
                         disabled={loading}
                         required
                       />
+                      <button
+                        type="button"
+                        onClick={() => setVerSenha(!verSenha)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+                        title={verSenha ? "Ocultar senha" : "Exibir senha"}
+                      >
+                        {verSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
                   </div>
 
