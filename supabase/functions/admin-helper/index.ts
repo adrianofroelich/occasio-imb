@@ -17,7 +17,11 @@ export default {
       const { action, ...body } = await req.json();
 
       if (action === "criar-cliente") {
-        const { email, password, nome, perfil, telefone, documento, empresa_mae_id, categorias } = body;
+        const { 
+          email, password, nome, perfil, telefone, documento, 
+          empresa_mae_id, categorias, creci, cep, endereco, 
+          bairro, cidade, estado 
+        } = body;
 
         const { data, error } = await ctx.supabaseAdmin.auth.admin.createUser({
           email: email.trim().toLowerCase(),
@@ -30,7 +34,13 @@ export default {
             documento_identificacao: documento || null,
             primeiro_acesso_pendente: true,
             empresa_mae_id: empresa_mae_id || null,
-            categorias: categorias || null
+            categorias: categorias || null,
+            creci: creci || null,
+            cep: cep || null,
+            endereco: endereco || null,
+            bairro: bairro || null,
+            cidade: cidade || null,
+            estado: estado || null
           }
         });
 
@@ -85,8 +95,97 @@ export default {
         });
       }
 
+      if (action === "atualizar-usuario") {
+        const { 
+          userId, email, nome, perfil, telefone, documento, 
+          creci, cep, endereco, bairro, cidade, estado 
+        } = body;
+
+        const updateData: any = {};
+        if (email) updateData.email = email.trim().toLowerCase();
+        
+        // Atualiza no Auth nativo do Supabase
+        const { data, error } = await ctx.supabaseAdmin.auth.admin.updateUserById(
+          userId,
+          {
+            ...updateData,
+            user_metadata: {
+              nome: nome?.trim(),
+              perfil: perfil,
+              telefone: telefone || null,
+              documento_identificacao: documento || null,
+              creci: creci || null,
+              cep: cep || null,
+              endereco: endereco || null,
+              bairro: bairro || null,
+              cidade: cidade || null,
+              estado: estado || null
+            }
+          }
+        );
+
+        if (error) {
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        return new Response(JSON.stringify({ user: data.user }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
       if (action === "deletar-usuario") {
         const { userId } = body;
+
+        // 1. Busca o perfil para determinar o tipo e os filhos dependentes
+        const { data: perfilData } = await ctx.supabaseAdmin
+          .from("perfis")
+          .select("perfil")
+          .eq("id", userId)
+          .single();
+
+        if (perfilData) {
+          const tipo = perfilData.perfil;
+
+          if (tipo === "imobiliaria") {
+            // A. Busca inquilinos e proprietários associados a imóveis dessa imobiliária
+            const { data: imoveisData } = await ctx.supabaseAdmin
+              .from("imoveis")
+              .select("inquilino_id, proprietario_id")
+              .eq("imobiliaria_id", userId);
+
+            if (imoveisData && imoveisData.length > 0) {
+              const idsExcluir = new Set<string>();
+              imoveisData.forEach((imob: any) => {
+                if (imob.inquilino_id) idsExcluir.add(imob.inquilino_id);
+                if (imob.proprietario_id) idsExcluir.add(imob.proprietario_id);
+              });
+
+              // B. Deleta todos os inquilinos e proprietários do Auth do Supabase
+              for (const id of idsExcluir) {
+                await ctx.supabaseAdmin.auth.admin.deleteUser(id);
+              }
+            }
+          } else if (tipo === "prestador") {
+            // A. Busca técnicos vinculados a essa empresa prestadora
+            const { data: tecnicosData } = await ctx.supabaseAdmin
+              .from("perfis")
+              .select("id")
+              .eq("empresa_mae_id", userId);
+
+            if (tecnicosData && tecnicosData.length > 0) {
+              // B. Deleta cada técnico do Auth do Supabase
+              for (const t of tecnicosData) {
+                await ctx.supabaseAdmin.auth.admin.deleteUser(t.id);
+              }
+            }
+          }
+        }
+
+        // 2. Deleta o usuário principal do Auth do Supabase
         const { error } = await ctx.supabaseAdmin.auth.admin.deleteUser(userId);
 
         if (error) {
