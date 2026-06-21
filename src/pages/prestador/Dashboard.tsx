@@ -1126,7 +1126,7 @@ export default function PrestadorDashboard() {
               <CardHeader className="bg-slate-50 border-b border-slate-200 p-4">
                 <CardTitle className="text-sm font-extrabold text-occasio-navy flex items-center gap-1.5">
                   <FileText className="h-4 w-4 text-orange-600" />
-                  Homologar &amp; Revisar Orçamento
+                  Revisar Orçamento &amp; Definir Valores para a Imobiliária
                 </CardTitle>
                 <CardDescription className="text-xs">Para: {chamadoHomologando.titulo}</CardDescription>
               </CardHeader>
@@ -1170,7 +1170,7 @@ export default function PrestadorDashboard() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        Mão de Obra Homologada *
+                        Mão de Obra para a Imobiliária *
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold select-none">
@@ -1190,7 +1190,7 @@ export default function PrestadorDashboard() {
 
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        Materiais Homologados
+                        Materiais para a Imobiliária
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold select-none">
@@ -1235,7 +1235,7 @@ export default function PrestadorDashboard() {
 
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      Prazo Homologado (em dias) *
+                      Prazo de Execução para a Imobiliária (em dias) *
                     </label>
                     <Input
                       type="number"
