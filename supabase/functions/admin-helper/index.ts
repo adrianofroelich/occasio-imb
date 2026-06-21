@@ -131,6 +131,32 @@ export default {
           });
         }
 
+        // Atualiza os dados na tabela pública public.perfis utilizando o ctx.supabaseAdmin (bypassa RLS)
+        const { error: dbError } = await ctx.supabaseAdmin
+          .from("perfis")
+          .update({
+            nome: nome?.trim(),
+            email: email ? email.trim().toLowerCase() : undefined,
+            perfil: perfil,
+            telefone: telefone || null,
+            documento_identificacao: documento || null,
+            creci: creci || null,
+            cep: cep || null,
+            endereco: endereco || null,
+            bairro: bairro || null,
+            cidade: cidade || null,
+            estado: estado || null,
+            atualizado_em: new Date().toISOString()
+          })
+          .eq("id", userId);
+
+        if (dbError) {
+          return new Response(JSON.stringify({ error: dbError.message }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
         return new Response(JSON.stringify({ user: data.user }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" }

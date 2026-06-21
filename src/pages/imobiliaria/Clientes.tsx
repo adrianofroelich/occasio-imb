@@ -15,7 +15,9 @@ import {
   Search, 
   UserCheck, 
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Edit,
+  Trash2
 } from "lucide-react"
 
 // Interface local que estende o perfil para exibição
@@ -45,6 +47,11 @@ export default function Clientes() {
   const [tipoPerfil, setTipoPerfil] = useState<"inquilino" | "proprietario">("inquilino")
   const [errorMsg, setErrorMsg] = useState("")
   const [successMsg, setSuccessMsg] = useState("")
+
+  // Estados de Edição e Exclusão
+  const [clienteEditando, setClienteEditando] = useState<ClienteExibicao | null>(null)
+  const [clienteParaExcluir, setClienteParaExcluir] = useState<ClienteExibicao | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Carrega clientes da tabela public.perfis
   async function carregarClientes() {
@@ -103,8 +110,8 @@ export default function Clientes() {
     }
   }
 
-  // Ação de cadastrar cliente
-  const handleCadastrarCliente = async (e: React.FormEvent) => {
+  // Ação de salvar cliente (pode ser cadastro ou edição)
+  const handleSalvarCliente = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMsg("")
     setSuccessMsg("")
@@ -127,35 +134,58 @@ export default function Clientes() {
     try {
       setSaving(true)
 
-      const senhaProvisoria = `Occasio@${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+      if (clienteEditando) {
+        // Fluxo de Edição / Atualização
+        const emailAlterado = email.trim().toLowerCase() !== (clienteEditando.email || "").trim().toLowerCase()
 
-      // 1. Cria o usuário invocando a Edge Function 'admin-helper'
-      const { data, error } = await supabase.functions.invoke("admin-helper", {
-        body: {
-          action: "criar-cliente",
-          email: email.trim().toLowerCase(),
-          password: senhaProvisoria,
-          nome: nome.trim(),
-          perfil: tipoPerfil,
-          telefone: telefone.replace(/\D/g, "") ? telefone : null,
-          documento: documento.replace(/\D/g, "") ? documento : null
+        // 1. Atualiza no Supabase Auth e na tabela pública public.perfis via Edge Function (que bypassa RLS)
+        const { error: edgeError } = await supabase.functions.invoke("admin-helper", {
+          body: {
+            action: "atualizar-usuario",
+            userId: clienteEditando.id,
+            email: emailAlterado ? email.trim().toLowerCase() : undefined,
+            nome: nome.trim(),
+            perfil: tipoPerfil,
+            telefone: telefone.replace(/\D/g, "") ? telefone : null,
+            documento: documento.replace(/\D/g, "") ? documento : null
+          }
+        })
+
+        if (edgeError) {
+          const msg = await obterMensagemErroEdge(edgeError)
+          throw new Error(msg)
         }
-      })
 
-      if (error) {
-        const msg = await obterMensagemErroEdge(error)
-        throw new Error(msg)
-      }
-      if (data && data.error) {
-        const msg = await obterMensagemErroEdge({ message: data.error })
-        throw new Error(msg)
-      }
+        setSuccessMsg(`Cliente "${nome.trim()}" atualizado com sucesso!`)
+        setClienteEditando(null)
+      } else {
+        // Fluxo de Cadastro Original
+        const senhaProvisoria = "occasio12345"
 
-      if (error) {
-        throw error
-      }
+        // 1. Cria o usuário invocando a Edge Function 'admin-helper'
+        const { data, error } = await supabase.functions.invoke("admin-helper", {
+          body: {
+            action: "criar-cliente",
+            email: email.trim().toLowerCase(),
+            password: senhaProvisoria,
+            nome: nome.trim(),
+            perfil: tipoPerfil,
+            telefone: telefone.replace(/\D/g, "") ? telefone : null,
+            documento: documento.replace(/\D/g, "") ? documento : null
+          }
+        })
 
-      setSuccessMsg(`Cliente cadastrado com sucesso! E-mail pré-confirmado em auth.users. Senha provisória gerada: ${senhaProvisoria}`)
+        if (error) {
+          const msg = await obterMensagemErroEdge(error)
+          throw new Error(msg)
+        }
+        if (data && data.error) {
+          const msg = await obterMensagemErroEdge({ message: data.error })
+          throw new Error(msg)
+        }
+
+        setSuccessMsg(`Cliente cadastrado com sucesso! E-mail pré-confirmado em auth.users. Senha provisória gerada: ${senhaProvisoria}`)
+      }
       
       // Limpa os campos do formulário
       setNome("")
@@ -167,10 +197,73 @@ export default function Clientes() {
       // Atualiza a lista
       carregarClientes()
     } catch (err: any) {
-      console.error("Erro ao cadastrar cliente:", err)
-      setErrorMsg(err.message || "Erro inesperado ao cadastrar o cliente.")
+      console.error("Erro ao salvar cliente:", err)
+      setErrorMsg(err.message || "Erro inesperado ao salvar o cliente.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Prepara formulário para edição do cliente
+  const handleEditarClick = (cliente: ClienteExibicao) => {
+    setErrorMsg("")
+    setSuccessMsg("")
+    setClienteEditando(cliente)
+    setNome(cliente.nome)
+    setEmail(cliente.email || "")
+    setTelefone(cliente.telefone ? aplicarMascaraTelefone(cliente.telefone) : "")
+    setDocumento(cliente.documento_identificacao ? aplicarMascaraCpfCnpj(cliente.documento_identificacao) : "")
+    setTipoPerfil(cliente.perfil)
+  }
+
+  // Cancela o modo de edição
+  const handleCancelarEdicao = () => {
+    setClienteEditando(null)
+    setNome("")
+    setEmail("")
+    setTelefone("")
+    setDocumento("")
+    setTipoPerfil("inquilino")
+    setErrorMsg("")
+    setSuccessMsg("")
+  }
+
+  // Confirma e realiza a exclusão física do cliente
+  const handleConfirmarExclusao = async () => {
+    if (!clienteParaExcluir) return
+    
+    try {
+      setDeleting(true)
+      setErrorMsg("")
+      setSuccessMsg("")
+
+      // Invoca a Edge Function admin-helper para deletar do auth.users (cascade cuidará de public.perfis)
+      const { error: edgeError } = await supabase.functions.invoke("admin-helper", {
+        body: {
+          action: "deletar-usuario",
+          userId: clienteParaExcluir.id
+        }
+      })
+
+      if (edgeError) {
+        const msg = await obterMensagemErroEdge(edgeError)
+        throw new Error(msg)
+      }
+
+      setSuccessMsg(`Cliente "${clienteParaExcluir.nome}" excluído com sucesso!`)
+      setClienteParaExcluir(null)
+      
+      // Se estava editando o mesmo usuário que foi deletado, cancela a edição
+      if (clienteEditando && clienteEditando.id === clienteParaExcluir.id) {
+        handleCancelarEdicao()
+      }
+
+      carregarClientes()
+    } catch (err: any) {
+      console.error("Erro ao excluir cliente:", err)
+      setErrorMsg(err.message || "Erro ao tentar excluir o cliente.")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -206,15 +299,26 @@ export default function Clientes() {
           <Card className="border-slate-200/80 shadow-md sticky top-24">
             <CardHeader className="bg-gradient-to-br from-slate-50 to-slate-100/50 border-b border-slate-200/60 pb-4">
               <CardTitle className="text-lg text-occasio-navy flex items-center gap-2">
-                <UserPlus className="h-5 w-5 text-occasio-blue" />
-                Novo Cliente
+                {clienteEditando ? (
+                  <>
+                    <Edit className="h-5 w-5 text-occasio-blue" />
+                    Editar Cliente
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-5 w-5 text-occasio-blue" />
+                    Novo Cliente
+                  </>
+                )}
               </CardTitle>
               <CardDescription>
-                Adicione proprietários ou inquilinos. Um perfil de primeiro acesso será gerado no Supabase.
+                {clienteEditando 
+                  ? "Altere os dados do cliente selecionado e clique em Salvar." 
+                  : "Adicione proprietários ou inquilinos. Um perfil de primeiro acesso será gerado no Supabase."}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
-              <form onSubmit={handleCadastrarCliente} className="space-y-4">
+              <form onSubmit={handleSalvarCliente} className="space-y-4">
                 {errorMsg && (
                   <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -226,7 +330,7 @@ export default function Clientes() {
                   <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg flex flex-col gap-2">
                     <div className="flex items-start gap-2">
                       <CheckCircle className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
-                      <span className="font-semibold">Cadastro Efetuado!</span>
+                      <span className="font-semibold">Operação Concluída!</span>
                     </div>
                     <p className="text-slate-600 font-mono text-[11px] bg-white p-2 border border-emerald-100 rounded">
                       {successMsg}
@@ -328,20 +432,33 @@ export default function Clientes() {
                   </div>
                 </div>
 
-                <Button
-                  type="submit"
-                  disabled={saving}
-                  className="w-full bg-occasio-blue hover:bg-occasio-navy text-white transition-all font-semibold shadow-md shadow-occasio-blue/10 mt-6"
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Cadastrando...
-                    </>
-                  ) : (
-                    "Cadastrar Cliente"
+                <div className="flex gap-2 pt-4">
+                  {clienteEditando && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCancelarEdicao}
+                      disabled={saving}
+                      className="w-1/2 border-slate-200 text-slate-700 hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </Button>
                   )}
-                </Button>
+                  <Button
+                    type="submit"
+                    disabled={saving}
+                    className={`${clienteEditando ? "w-1/2" : "w-full"} bg-occasio-blue hover:bg-occasio-navy text-white transition-all font-semibold shadow-md shadow-occasio-blue/10`}
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      clienteEditando ? "Salvar" : "Cadastrar Cliente"
+                    )}
+                  </Button>
+                </div>
               </form>
             </CardContent>
           </Card>
@@ -428,6 +545,7 @@ export default function Clientes() {
                         <th className="py-3 px-6">Documento & Contato</th>
                         <th className="py-3 px-6">Perfil</th>
                         <th className="py-3 px-6">Status</th>
+                        <th className="py-3 px-6 text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
@@ -486,6 +604,30 @@ export default function Clientes() {
                               </div>
                             )}
                           </td>
+                          <td className="py-4 px-6 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditarClick(cliente)}
+                                className={`h-8 w-8 p-0 text-slate-500 hover:text-occasio-blue hover:bg-slate-100 ${
+                                  clienteEditando?.id === cliente.id ? "bg-slate-100 text-occasio-blue" : ""
+                                }`}
+                                title="Editar Cliente"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setClienteParaExcluir(cliente)}
+                                className="h-8 w-8 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                title="Excluir Cliente"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -496,6 +638,54 @@ export default function Clientes() {
           </Card>
         </div>
       </div>
+
+      {/* Modal de Confirmação de Exclusão */}
+      {clienteParaExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <Card className="w-full max-w-md border-slate-200 shadow-2xl bg-white overflow-hidden animate-scale-in">
+            <CardHeader className="bg-red-50 border-b border-red-100 pb-4">
+              <div className="flex items-center gap-2 text-red-800">
+                <AlertCircle className="h-5 w-5 text-red-600 animate-pulse" />
+                <CardTitle className="text-lg font-extrabold">Excluir Cliente</CardTitle>
+              </div>
+              <CardDescription className="text-red-700/80 text-xs font-semibold">
+                Atenção: Esta ação é permanente e não poderá ser desfeita.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+                Você está prestes a excluir a conta de <strong className="text-slate-900">{clienteParaExcluir.nome}</strong> ({clienteParaExcluir.perfil === 'inquilino' ? 'Inquilino' : 'Proprietário'}). 
+                Isso removerá em definitivo o acesso deste usuário ao sistema.
+              </p>
+              
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setClienteParaExcluir(null)}
+                  disabled={deleting}
+                  className="border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleConfirmarExclusao}
+                  disabled={deleting}
+                  className="bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md shadow-red-600/10 text-xs"
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4.5 w-4.5 animate-spin" />
+                      Excluindo...
+                    </>
+                  ) : (
+                    "Confirmar Exclusão"
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

@@ -124,7 +124,8 @@ export default function PrestadorEquipe() {
     setSucesso(null)
 
     try {
-      const senhaProvisoria = `Occasio@${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+      // Define a senha provisória como a senha padrão de teste do sistema para homologação
+      const senhaProvisoria = "occasio12345"
 
       // 1. Invoca Edge Function admin-helper para criar o usuário do Técnico
       const { data, error } = await supabase.functions.invoke("admin-helper", {
