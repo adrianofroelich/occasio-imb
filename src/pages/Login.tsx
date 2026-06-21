@@ -151,7 +151,7 @@ export default function Login() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center w-full max-w-5xl">
           
           {/* Lado Esquerdo: Mascote Bob (Personagem 3) com Balão de Fala */}
-          <div className="lg:col-span-4 flex flex-col items-center justify-center space-y-4 animate-in fade-in slide-in-from-left duration-700 order-2 lg:order-1">
+          <div className="lg:col-span-4 flex flex-col items-center justify-center space-y-4 animate-in fade-in slide-in-from-left duration-700 order-2 lg:order-none">
             {/* Balão de Fala do Bob */}
             <div className="relative w-full max-w-xs bg-white border-2 border-slate-200 rounded-2xl p-5 shadow-lg shadow-slate-100/50">
               {/* Seta do balão apontando para baixo/esquerda no mobile, ou para baixo no desktop */}
@@ -189,7 +189,7 @@ export default function Login() {
           </div>
 
           {/* Lado Central: Formulário de Login (Card) */}
-          <div className="lg:col-span-5 flex justify-center animate-in fade-in zoom-in duration-700 order-1 lg:order-2">
+          <div className="lg:col-span-5 flex justify-center animate-in fade-in zoom-in duration-700 order-1 lg:order-none">
             <Card className="w-full max-w-sm border-slate-200 shadow-xl shadow-slate-100 bg-white overflow-hidden hover:shadow-2xl transition-shadow duration-300">
               <CardHeader className="p-6 pb-2 text-center border-b border-slate-50">
                 <CardTitle className="text-lg font-black text-occasio-navy">Acessar o Sistema</CardTitle>
@@ -276,7 +276,7 @@ export default function Login() {
           </div>
 
           {/* Lado Direito: Mascote Técnico (Personagem 6) */}
-          <div className="lg:col-span-3 flex justify-center animate-in fade-in slide-in-from-right duration-700 order-3 lg:order-3">
+          <div className="lg:col-span-3 flex justify-center animate-in fade-in slide-in-from-right duration-700 order-3 lg:order-none">
             <div className="relative group">
               <div className="absolute inset-0 bg-yellow-500/15 rounded-full blur-2xl group-hover:bg-yellow-500/25 transition-all duration-500 scale-75"></div>
               <img 
