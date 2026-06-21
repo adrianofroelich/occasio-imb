@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { supabase, obterMensagemErroEdge } from "@/lib/supabase"
 import { useAuth, type Perfil } from "@/hooks/useAuth"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
@@ -141,8 +141,13 @@ export default function PrestadorEquipe() {
         }
       })
 
-      if (error || (data && data.error)) {
-        throw new Error(error?.message || data?.error || "Erro ao cadastrar técnico na base administrativa.")
+      if (error) {
+        const msg = await obterMensagemErroEdge(error)
+        throw new Error(msg)
+      }
+      if (data && data.error) {
+        const msg = await obterMensagemErroEdge({ message: data.error })
+        throw new Error(msg)
       }
 
       setSucesso(`Técnico cadastrado com sucesso! E-mail pré-confirmado em auth.users. Senha provisória gerada: ${senhaProvisoria}`)
@@ -237,8 +242,13 @@ export default function PrestadorEquipe() {
         }
       })
 
-      if (error || (data && data.error)) {
-        throw new Error(error?.message || data?.error || "Erro ao deletar o técnico da base administrativa.")
+      if (error) {
+        const msg = await obterMensagemErroEdge(error)
+        throw new Error(msg)
+      }
+      if (data && data.error) {
+        const msg = await obterMensagemErroEdge({ message: data.error })
+        throw new Error(msg)
       }
 
       setSucesso(`Técnico "${nomeTecnico}" excluído com sucesso!`)

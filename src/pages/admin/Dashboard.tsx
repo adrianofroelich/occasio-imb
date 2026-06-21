@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { supabase, obterMensagemErroEdge } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
@@ -171,8 +171,14 @@ export default function AdminDashboard() {
         }
       })
 
-      if (edgeError) throw edgeError
-      if (data?.error) throw new Error(data.error)
+      if (edgeError) {
+        const msg = await obterMensagemErroEdge(edgeError)
+        throw new Error(msg)
+      }
+      if (data?.error) {
+        const msg = await obterMensagemErroEdge({ message: data.error })
+        throw new Error(msg)
+      }
 
       setSucesso(`Imobiliária "${imobNome}" cadastrada com sucesso! Senha temporária: occasio12345`)
       setImobNome("")
@@ -210,8 +216,14 @@ export default function AdminDashboard() {
         }
       })
 
-      if (edgeError) throw edgeError
-      if (data?.error) throw new Error(data.error)
+      if (edgeError) {
+        const msg = await obterMensagemErroEdge(edgeError)
+        throw new Error(msg)
+      }
+      if (data?.error) {
+        const msg = await obterMensagemErroEdge({ message: data.error })
+        throw new Error(msg)
+      }
 
       setSucesso(`Empresa Prestadora "${prestNome}" cadastrada com sucesso! Senha temporária: occasio12345`)
       setPrestNome("")

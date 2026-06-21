@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
+import { supabase, obterMensagemErroEdge } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
@@ -142,8 +142,13 @@ export default function Clientes() {
         }
       })
 
-      if (error || (data && data.error)) {
-        throw new Error(error?.message || data?.error || "Erro ao cadastrar o cliente na base administrativa.")
+      if (error) {
+        const msg = await obterMensagemErroEdge(error)
+        throw new Error(msg)
+      }
+      if (data && data.error) {
+        const msg = await obterMensagemErroEdge({ message: data.error })
+        throw new Error(msg)
       }
 
       if (error) {
