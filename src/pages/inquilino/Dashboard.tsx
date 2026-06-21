@@ -295,22 +295,8 @@ export default function InquilinoDashboard() {
 
   // Obtém o índice do status atual para desenhar a timeline de progresso
   const getIndiceStatusAtual = (statusAtual: StatusChamado) => {
-    // Agrupa status semelhantes para a timeline simplificada do inquilino
     if (statusAtual === 'reprovado') return -1
-    
-    const statusMapeado = statusAtual === 'em_triagem' ? 'em_triagem'
-                        : statusAtual === 'aguardando_orcamento' || statusAtual === 'orcamento_recebido' ? 'aguardando_orcamento'
-                        : statusAtual === 'analise_proprietario' || statusAtual === 'aguardando_autorizacao' ? 'analise_proprietario'
-                        : statusAtual === 'os_liberada' || statusAtual === 'em_execucao' ? 'os_liberada'
-                        : statusAtual === 'servico_concluido' ? 'servico_concluido'
-                        : statusAtual === 'encerrado' ? 'encerrado'
-                        : 'aberto'
-
-    const timelineSimplificada: StatusChamado[] = [
-      'aberto', 'em_triagem', 'aguardando_orcamento', 'analise_proprietario', 'os_liberada', 'servico_concluido', 'encerrado'
-    ]
-
-    return timelineSimplificada.indexOf(statusMapeado)
+    return STATUS_TIMELINE.findIndex(item => item.status === statusAtual)
   }
 
   // Removida constante de timeline simplificada não utilizada
