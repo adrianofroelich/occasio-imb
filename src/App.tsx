@@ -4,6 +4,8 @@ import Home from "./pages/Home"
 import Beneficios from "./pages/Beneficios"
 import { Button } from "@/components/ui/button"
 import { AuthProvider, useAuth } from "./hooks/useAuth"
+import type { TipoPerfil } from "./hooks/useAuth"
+import { Loader2 } from "lucide-react"
 import LoginTeste from "./pages/LoginTeste"
 import Login from "./pages/Login"
 import Imoveis from "./pages/imobiliaria/Imoveis"
@@ -35,6 +37,29 @@ function ScrollToHash() {
   }, [location])
   
   return null
+}
+
+// Componente de Rota Protegida com base em autenticação e perfil
+function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: TipoPerfil[] }) {
+  const { user, perfil, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-white">
+        <Loader2 className="h-8 w-8 animate-spin text-occasio-blue" />
+      </div>
+    )
+  }
+
+  if (!user || !perfil) {
+    return <Navigate to="/" replace />
+  }
+
+  if (allowedRoles && !allowedRoles.includes(perfil.perfil)) {
+    return <Navigate to="/" replace />
+  }
+
+  return <>{children}</>
 }
 
 // Layout principal unificado para cabeçalho e rodapé compartilhados
@@ -70,20 +95,12 @@ function MainLayout() {
           {/* Navegação de Links (detecta rota atual para redirecionamento correto) */}
           <nav className="hidden md:flex gap-8 text-sm font-medium text-slate-600 items-center">
             {!user && (
-              <>
-                {isHome ? (
-                  <a href="#features" className="hover:text-occasio-blue transition-colors">Funcionalidades</a>
-                ) : (
-                  <Link to="/#features" className="hover:text-occasio-blue transition-colors">Funcionalidades</Link>
-                )}
-                
-                <Link 
-                  to="/beneficios" 
-                  className={`${location.pathname === "/beneficios" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
-                >
-                  Benefícios
-                </Link>
-              </>
+              <Link 
+                to="/beneficios" 
+                className={`${location.pathname === "/beneficios" ? "text-occasio-blue font-bold border-b-2 border-occasio-blue pb-1" : "hover:text-occasio-blue"} transition-colors`}
+              >
+                Benefícios
+              </Link>
             )}
 
             {/* Links administrativos exclusivos para Imobiliária ou Super Admin */}
@@ -160,14 +177,6 @@ function MainLayout() {
                 Painel Admin
               </Link>
             )}
-            
-            {!user && (
-              isHome ? (
-                <a href="#features" className="hover:text-occasio-blue transition-colors">Como Funciona</a>
-              ) : (
-                <Link to="/#features" className="hover:text-occasio-blue transition-colors">Como Funciona</Link>
-              )
-            )}
 
             {!import.meta.env.PROD && (
               <Link 
@@ -219,15 +228,15 @@ function MainLayout() {
           <Route path="/beneficios" element={<Beneficios />} />
           <Route path="/login" element={<Login />} />
           <Route path="/login-teste" element={<LoginTeste />} />
-          <Route path="/imobiliaria/clientes" element={<Clientes />} />
-          <Route path="/imobiliaria/imoveis" element={<Imoveis />} />
-          <Route path="/imobiliaria/dashboard" element={<Dashboard />} />
-          <Route path="/inquilino/dashboard" element={<InquilinoDashboard />} />
-          <Route path="/prestador/dashboard" element={<PrestadorDashboard />} />
-          <Route path="/proprietario/dashboard" element={<ProprietarioDashboard />} />
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/imobiliaria/clientes" element={<ProtectedRoute allowedRoles={["imobiliaria", "super_admin"]}><Clientes /></ProtectedRoute>} />
+          <Route path="/imobiliaria/imoveis" element={<ProtectedRoute allowedRoles={["imobiliaria", "super_admin"]}><Imoveis /></ProtectedRoute>} />
+          <Route path="/imobiliaria/dashboard" element={<ProtectedRoute allowedRoles={["imobiliaria", "super_admin"]}><Dashboard /></ProtectedRoute>} />
+          <Route path="/inquilino/dashboard" element={<ProtectedRoute allowedRoles={["inquilino", "super_admin"]}><InquilinoDashboard /></ProtectedRoute>} />
+          <Route path="/prestador/dashboard" element={<ProtectedRoute allowedRoles={["prestador", "super_admin"]}><PrestadorDashboard /></ProtectedRoute>} />
+          <Route path="/proprietario/dashboard" element={<ProtectedRoute allowedRoles={["proprietario", "super_admin"]}><ProprietarioDashboard /></ProtectedRoute>} />
+          <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={["super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/vinculos" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="/prestador/equipe" element={<PrestadorEquipe />} />
+          <Route path="/prestador/equipe" element={<ProtectedRoute allowedRoles={["prestador", "super_admin"]}><PrestadorEquipe /></ProtectedRoute>} />
         </Routes>
       </main>
 
