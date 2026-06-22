@@ -50,3 +50,26 @@ graph TD
 
 ### 📶 Resiliência Offline (PWA)
 - Prestadores operando em subsolos, áreas remotas ou sem rede devem conseguir listar suas Ordens de Serviço ativas e armazenar dados de conclusão temporariamente em cache local (`IndexedDB` ou `localStorage`), sincronizando-os automaticamente assim que a conexão for restabelecida.
+
+---
+
+## 🎨 Guia de Estilo (Cores & Fontes)
+
+Este projeto utiliza o Tailwind CSS estruturado com tokens de cores HSL dinâmicas e classes utilitárias para fontes.
+
+### 🎨 Cores (Colors)
+A paleta de cores institucional da **Occasio** está definida em [tailwind.config.js](file:///c:/Users/Samsung/occasio-imb/tailwind.config.js):
+* **Azul-Marinho Institucional (`occasio-navy`):** `#002244` (Cor primária escura para cabeçalhos e elementos de destaque do painel).
+* **Azul Celeste (`occasio-blue`):** `#2A92D0` (Cor de realce para botões, links e estados ativos da linha do tempo).
+* **Fundo Suave (`occasio-light`):** `#F4F9FD` (Tom azulado sutil e agradável para backgrounds).
+
+As cores dinâmicas padrão (shadcn/ui) estão configuradas no arquivo [src/index.css](file:///c:/Users/Samsung/occasio-imb/src/index.css) mapeadas para variáveis CSS HSL:
+* `--primary`: `210 100% 14%` (Equivalente ao marinho profundo da Occasio).
+* `--secondary`: `202 67% 49%` (Equivalente ao azul celeste da Occasio).
+* `--background`: `210 40% 98%` (Tom suave de fundo).
+* `--border`: `214.3 31.8% 91.4%` (Bordas claras e elegantes).
+
+### 🔤 Fontes (Fonts)
+* A tipografia padrão do projeto utiliza a classe utilitária `font-sans` do Tailwind, configurada globalmente no `body` do arquivo [src/index.css](file:///c:/Users/Samsung/occasio-imb/src/index.css#L74).
+* Como não há sobrescritas personalizadas na configuração de família de fontes, a pilha utiliza a família de fontes padrão sem serifa do Tailwind CSS (*Inter*, *system-ui*, *-apple-system*, *BlinkMacSystemFont*, *Segoe UI*, *Roboto*, *Helvetica Neue*, *Arial*, etc.), ideal para interfaces SaaS responsivas e de carregamento rápido.
+
