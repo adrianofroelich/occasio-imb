@@ -16,6 +16,8 @@ export interface Perfil {
   primeiro_acesso_pendente?: boolean
   empresa_mae_id?: string | null
   categorias?: string[] | null
+  tipo_repasse?: 'mensal' | 'quinzenal' | 'semanal' | 'por_servico' | null
+  prazo_repasse_dias?: number | null
   criado_em: string
   atualizado_em: string
 }

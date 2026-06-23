@@ -28,6 +28,8 @@ interface PerfilUsuario {
   bairro?: string | null
   cidade?: string | null
   estado?: string | null
+  tipo_repasse?: 'mensal' | 'quinzenal' | 'semanal' | 'por_servico' | null
+  prazo_repasse_dias?: number | null
 }
 
 interface Vinculo {
@@ -89,12 +91,16 @@ export default function AdminDashboard() {
   const [imobCidade, setImobCidade] = useState("")
   const [imobEstado, setImobEstado] = useState("")
   const [buscandoCep, setBuscandoCep] = useState(false)
+  const [imobTipoRepasse, setImobTipoRepasse] = useState<"mensal" | "quinzenal" | "semanal" | "por_servico" | "">("")
+  const [imobPrazoRepasseDias, setImobPrazoRepasseDias] = useState<number | "">("")
 
   // Formulário: Prestadoras
   const [prestNome, setPrestNome] = useState("")
   const [prestCnpj, setPrestCnpj] = useState("")
   const [prestEmail, setPrestEmail] = useState("")
   const [prestTelefone, setPrestTelefone] = useState("")
+  const [prestTipoRepasse, setPrestTipoRepasse] = useState<"mensal" | "quinzenal" | "semanal" | "por_servico" | "">("")
+  const [prestPrazoRepasseDias, setPrestPrazoRepasseDias] = useState<number | "">("")
 
   // Formulário: Vínculos
   const [vinculoImobiliariaId, setVinculoImobiliariaId] = useState("")
@@ -112,6 +118,8 @@ export default function AdminDashboard() {
   const [editBairro, setEditBairro] = useState("")
   const [editCidade, setEditCidade] = useState("")
   const [editEstado, setEditEstado] = useState("")
+  const [editTipoRepasse, setEditTipoRepasse] = useState<"mensal" | "quinzenal" | "semanal" | "por_servico" | "">("")
+  const [editPrazoRepasseDias, setEditPrazoRepasseDias] = useState<number | "">("")
   const [editando, setEditando] = useState(false)
 
   // Estados de Exclusão Crítica
@@ -250,6 +258,8 @@ export default function AdminDashboard() {
     setEditBairro(p.bairro || "")
     setEditCidade(p.cidade || "")
     setEditEstado(p.estado || "")
+    setEditTipoRepasse(p.tipo_repasse || "")
+    setEditPrazoRepasseDias(p.prazo_repasse_dias ?? "")
     setErro(null)
     setSucesso(null)
   }
@@ -279,7 +289,9 @@ export default function AdminDashboard() {
           endereco: editEndereco.trim() || null,
           bairro: editBairro.trim() || null,
           cidade: editCidade.trim() || null,
-          estado: editEstado.trim().toUpperCase() || null
+          estado: editEstado.trim().toUpperCase() || null,
+          tipo_repasse: editTipoRepasse || null,
+          prazo_repasse_dias: editPrazoRepasseDias !== "" ? Number(editPrazoRepasseDias) : null
         }
       })
 
@@ -301,7 +313,9 @@ export default function AdminDashboard() {
           endereco: editEndereco.trim() || null,
           bairro: editBairro.trim() || null,
           cidade: editCidade.trim() || null,
-          estado: editEstado.trim().toUpperCase() || null
+          estado: editEstado.trim().toUpperCase() || null,
+          tipo_repasse: editTipoRepasse || null,
+          prazo_repasse_dias: editPrazoRepasseDias !== "" ? Number(editPrazoRepasseDias) : null
         })
         .eq("id", perfilEditando.id)
 
@@ -379,7 +393,9 @@ export default function AdminDashboard() {
           endereco: imobEndereco.trim() || null,
           bairro: imobBairro.trim() || null,
           cidade: imobCidade.trim() || null,
-          estado: imobEstado.trim().toUpperCase() || null
+          estado: imobEstado.trim().toUpperCase() || null,
+          tipo_repasse: imobTipoRepasse || null,
+          prazo_repasse_dias: imobPrazoRepasseDias !== "" ? Number(imobPrazoRepasseDias) : null
         }
       })
 
@@ -403,6 +419,8 @@ export default function AdminDashboard() {
       setImobBairro("")
       setImobCidade("")
       setImobEstado("")
+      setImobTipoRepasse("")
+      setImobPrazoRepasseDias("")
       await carregarDados(true)
     } catch (err: any) {
       console.error(err)
@@ -430,7 +448,9 @@ export default function AdminDashboard() {
           nome: prestNome.trim(),
           perfil: "prestador",
           telefone: prestTelefone || null,
-          documento: prestCnpj
+          documento: prestCnpj,
+          tipo_repasse: prestTipoRepasse || null,
+          prazo_repasse_dias: prestPrazoRepasseDias !== "" ? Number(prestPrazoRepasseDias) : null
         }
       })
 
@@ -448,6 +468,8 @@ export default function AdminDashboard() {
       setPrestCnpj("")
       setPrestEmail("")
       setPrestTelefone("")
+      setPrestTipoRepasse("")
+      setPrestPrazoRepasseDias("")
       await carregarDados(true)
     } catch (err: any) {
       console.error(err)
@@ -724,6 +746,52 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
+                  {/* Condições de Acerto */}
+                  <div className="border-t border-slate-100 pt-3 space-y-3">
+                    <span className="text-[10px] font-bold text-slate-400 block uppercase">Acerto Financeiro com Prestador PJ</span>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Condição de Acerto *</label>
+                        <select
+                          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                          value={imobTipoRepasse}
+                          onChange={(e) => {
+                            setImobTipoRepasse(e.target.value as any)
+                            setImobPrazoRepasseDias("")
+                          }}
+                          required
+                        >
+                          <option value="">Selecione...</option>
+                          <option value="mensal">Mensal</option>
+                          <option value="quinzenal">Quinzenal</option>
+                          <option value="semanal">Semanal</option>
+                          <option value="por_servico">Por serviço realizado</option>
+                        </select>
+                      </div>
+
+                      {imobTipoRepasse && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            {imobTipoRepasse === "mensal" && "Dia do mês do repasse? *"}
+                            {imobTipoRepasse === "quinzenal" && "Dias após quinzena? *"}
+                            {imobTipoRepasse === "semanal" && "Dias após semana? *"}
+                            {imobTipoRepasse === "por_servico" && "Dias após entrega? *"}
+                          </label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={imobTipoRepasse === "mensal" ? 31 : undefined}
+                            placeholder="Ex: 5"
+                            value={imobPrazoRepasseDias}
+                            onChange={(e) => setImobPrazoRepasseDias(e.target.value ? Number(e.target.value) : "")}
+                            required
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <Button 
                     disabled={salvando || buscandoCep}
                     type="submit" 
@@ -783,6 +851,53 @@ export default function AdminDashboard() {
                       onChange={(e) => setPrestTelefone(aplicarMascaraTelefone(e.target.value))}
                     />
                   </div>
+
+                  {/* Condições de Acerto */}
+                  <div className="border-t border-slate-100 pt-3 space-y-3">
+                    <span className="text-[10px] font-bold text-slate-400 block uppercase">Condição de Repasse para Técnicos (PF)</span>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Condição de Acerto *</label>
+                        <select
+                          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                          value={prestTipoRepasse}
+                          onChange={(e) => {
+                            setPrestTipoRepasse(e.target.value as any)
+                            setPrestPrazoRepasseDias("")
+                          }}
+                          required
+                        >
+                          <option value="">Selecione...</option>
+                          <option value="mensal">Mensal</option>
+                          <option value="quinzenal">Quinzenal</option>
+                          <option value="semanal">Semanal</option>
+                          <option value="por_servico">Por serviço realizado</option>
+                        </select>
+                      </div>
+
+                      {prestTipoRepasse && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            {prestTipoRepasse === "mensal" && "Dia do mês do repasse? *"}
+                            {prestTipoRepasse === "quinzenal" && "Dias após quinzena? *"}
+                            {prestTipoRepasse === "semanal" && "Dias após semana? *"}
+                            {prestTipoRepasse === "por_servico" && "Dias após entrega? *"}
+                          </label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={prestTipoRepasse === "mensal" ? 31 : undefined}
+                            placeholder="Ex: 5"
+                            value={prestPrazoRepasseDias}
+                            onChange={(e) => setPrestPrazoRepasseDias(e.target.value ? Number(e.target.value) : "")}
+                            required
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <Button 
                     disabled={salvando}
                     type="submit" 
@@ -879,6 +994,20 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-slate-400" /> CNPJ: {imob.documento_identificacao || "Não informado"}</div>
                           {imob.creci && <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-slate-400" /> CRECI: {imob.creci}</div>}
                           {imob.telefone && <div className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-slate-400" /> {imob.telefone}</div>}
+                          <div className="flex items-center gap-1.5 mt-1.5 text-[10px] bg-slate-50/50 p-2 rounded border border-slate-100 max-w-lg leading-relaxed font-medium">
+                            <span className="font-extrabold text-occasio-navy">Condição de Acerto PJ:</span>{' '}
+                            {imob.tipo_repasse ? (
+                              <>
+                                <span className="capitalize font-bold text-occasio-blue">{imob.tipo_repasse}</span>{' '}
+                                {imob.tipo_repasse === 'mensal' && `(Todo dia ${imob.prazo_repasse_dias})`}
+                                {imob.tipo_repasse === 'quinzenal' && `(${imob.prazo_repasse_dias} dias após quinzena)`}
+                                {imob.tipo_repasse === 'semanal' && `(${imob.prazo_repasse_dias} dias após semana)`}
+                                {imob.tipo_repasse === 'por_servico' && `(${imob.prazo_repasse_dias} dias após entrega)`}
+                              </>
+                            ) : (
+                              <span className="text-slate-400 italic">Não configurada</span>
+                            )}
+                          </div>
                           {(imob.endereco || imob.cep) && (
                             <div className="text-slate-500 mt-1.5 text-[10px] bg-slate-50/50 p-2 rounded border border-slate-100 max-w-lg leading-relaxed font-medium">
                               <span className="font-extrabold text-occasio-navy">Endereço:</span> {imob.endereco}{imob.bairro ? `, ${imob.bairro}` : ""}{imob.cidade ? ` - ${imob.cidade}/${imob.estado}` : ""}{imob.cep ? ` (CEP: ${imob.cep})` : ""}
@@ -942,6 +1071,20 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-slate-400" /> {emp.email}</div>
                           <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-slate-400" /> CNPJ: {emp.documento_identificacao || "Não informado"}</div>
                           {emp.telefone && <div className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-slate-400" /> {emp.telefone}</div>}
+                          <div className="flex items-center gap-1.5 mt-1.5 text-[10px] bg-slate-50/50 p-2 rounded border border-slate-100 max-w-lg leading-relaxed font-medium">
+                            <span className="font-extrabold text-occasio-navy">Repasse Técnicos (PF):</span>{' '}
+                            {emp.tipo_repasse ? (
+                              <>
+                                <span className="capitalize font-bold text-occasio-blue">{emp.tipo_repasse}</span>{' '}
+                                {emp.tipo_repasse === 'mensal' && `(Todo dia ${emp.prazo_repasse_dias})`}
+                                {emp.tipo_repasse === 'quinzenal' && `(${emp.prazo_repasse_dias} dias após quinzena)`}
+                                {emp.tipo_repasse === 'semanal' && `(${emp.prazo_repasse_dias} dias após semana)`}
+                                {emp.tipo_repasse === 'por_servico' && `(${emp.prazo_repasse_dias} dias após entrega)`}
+                              </>
+                            ) : (
+                              <span className="text-slate-400 italic">Não configurado</span>
+                            )}
+                          </div>
                           {(emp.endereco || emp.cep) && (
                             <div className="text-slate-500 mt-1.5 text-[10px] bg-slate-50/50 p-2 rounded border border-slate-100 max-w-lg leading-relaxed font-medium">
                               <span className="font-extrabold text-occasio-navy">Endereço:</span> {emp.endereco}{emp.bairro ? `, ${emp.bairro}` : ""}{emp.cidade ? ` - ${emp.cidade}/${emp.estado}` : ""}{emp.cep ? ` (CEP: ${emp.cep})` : ""}
@@ -1173,6 +1316,62 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 )}
+
+                {/* Condições de Acerto na Edição */}
+                <div className="border-t border-slate-100 pt-3 space-y-3">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    {perfilEditando.perfil === "imobiliaria" 
+                      ? "Acerto Financeiro com Prestador PJ" 
+                      : "Condição de Repasse para Técnicos (PF)"}
+                  </span>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        {perfilEditando.perfil === "imobiliaria"
+                          ? "Condição de Acerto com o Prestador PJ *"
+                          : "Condição de Acerto com o Técnico *"}
+                      </label>
+                      <select
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                        value={editTipoRepasse}
+                        onChange={(e) => {
+                          setEditTipoRepasse(e.target.value as any)
+                          setEditPrazoRepasseDias("")
+                        }}
+                        disabled={editando}
+                        required
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="mensal">Mensal</option>
+                        <option value="quinzenal">Quinzenal</option>
+                        <option value="semanal">Semanal</option>
+                        <option value="por_servico">Por serviço realizado</option>
+                      </select>
+                    </div>
+
+                    {editTipoRepasse && (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          {editTipoRepasse === "mensal" && "Dia do mês do repasse? *"}
+                          {editTipoRepasse === "quinzenal" && "Dias após quinzena? *"}
+                          {editTipoRepasse === "semanal" && "Dias após semana? *"}
+                          {editTipoRepasse === "por_servico" && "Dias após entrega? *"}
+                        </label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={editTipoRepasse === "mensal" ? 31 : undefined}
+                          placeholder="Ex: 5"
+                          value={editPrazoRepasseDias}
+                          onChange={(e) => setEditPrazoRepasseDias(e.target.value ? Number(e.target.value) : "")}
+                          disabled={editando}
+                          required
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 <div className="flex gap-3 pt-4 border-t border-slate-100 sticky bottom-0 bg-white">
                   <Button

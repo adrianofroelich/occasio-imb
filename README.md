@@ -58,6 +58,26 @@ Para manter a consistência do projeto, todos os desenvolvedores (e IAs auxiliar
 
 ---
 
+## 💰 Regras de Acertos Financeiros e Condições de Repasse
+
+O sistema conta com um motor financeiro de repasse de valores para Prestadoras (PJ) e Técnicos de Campo (PF) com as seguintes condições de acerto:
+
+1. **Mensal**: O repasse ocorre no dia programado `X` (ex: todo dia 10) do mês subsequente à data de conclusão do chamado.
+2. **Quinzenal**: O repasse é computado a partir do fechamento da quinzena da conclusão (dia 15 ou último dia do mês), somado a `Y` dias de prazo de carência.
+3. **Semanal**: O repasse ocorre após o fechamento da semana (domingo do encerramento), acrescido de `Z` dias de carência.
+4. **Por Serviço**: O repasse é liberado exatamente `W` dias após a conclusão do chamado.
+
+### Painel Financeiro PJ (Prestador)
+- **A Receber**: Calculado e previsto com base nos termos de repasse definidos no cadastro da **Imobiliária** contratante.
+- **A Pagar**: Calculado e previsto com base nos termos de repasse configurados na própria conta da **Prestadora PJ** para repasse ao técnico.
+- Exibe o consolidado dividido em: **Total**, **Vencidos** (prazos expirados) e **A Vencer**.
+
+### Painel Financeiro PF (Técnico de Campo)
+- Apresenta as ordens de serviço concluídas com a previsão de recebimento de repasse baseado nos termos configurados no perfil da sua **Empresa Mãe**.
+- Exibe o consolidado de **Total**, **Vencido** e **A Vencer** com reembolso de materiais integrado.
+
+---
+
 ## 📁 Estrutura de Pastas (Mapa do Projeto)
 
 ```bash

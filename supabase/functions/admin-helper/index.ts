@@ -1,5 +1,5 @@
-import "@supabase/functions-js/edge-runtime.d.ts";
-import { withSupabase } from "@supabase/server";
+import "jsr:@supabase/functions-js@^2/edge-runtime.d.ts";
+import { withSupabase } from "npm:@supabase/server@^1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +20,7 @@ export default {
         const { 
           email, password, nome, perfil, telefone, documento, 
           empresa_mae_id, categorias, creci, cep, endereco, 
-          bairro, cidade, estado 
+          bairro, cidade, estado, tipo_repasse, prazo_repasse_dias
         } = body;
 
         const { data, error } = await ctx.supabaseAdmin.auth.admin.createUser({
@@ -40,7 +40,9 @@ export default {
             endereco: endereco || null,
             bairro: bairro || null,
             cidade: cidade || null,
-            estado: estado || null
+            estado: estado || null,
+            tipo_repasse: tipo_repasse || null,
+            prazo_repasse_dias: prazo_repasse_dias || null
           }
         });
 
@@ -98,7 +100,8 @@ export default {
       if (action === "atualizar-usuario") {
         const { 
           userId, email, nome, perfil, telefone, documento, 
-          creci, cep, endereco, bairro, cidade, estado 
+          creci, cep, endereco, bairro, cidade, estado,
+          tipo_repasse, prazo_repasse_dias
         } = body;
 
         const updateData: any = {};
@@ -119,7 +122,9 @@ export default {
               endereco: endereco || null,
               bairro: bairro || null,
               cidade: cidade || null,
-              estado: estado || null
+              estado: estado || null,
+              tipo_repasse: tipo_repasse || null,
+              prazo_repasse_dias: prazo_repasse_dias || null
             }
           }
         );
@@ -146,6 +151,8 @@ export default {
             bairro: bairro || null,
             cidade: cidade || null,
             estado: estado || null,
+            tipo_repasse: tipo_repasse || null,
+            prazo_repasse_dias: prazo_repasse_dias || null,
             atualizado_em: new Date().toISOString()
           })
           .eq("id", userId);

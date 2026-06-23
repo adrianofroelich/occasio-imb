@@ -26,6 +26,7 @@ interface Chamado {
   disponibilidade_atendimento: string
   status: StatusChamado
   criado_em: string
+  data_conclusao?: string | null
   imovel_id: string
   inquilino_id: string
   empresa_prestadora_id?: string | null
@@ -34,6 +35,12 @@ interface Chamado {
     codigo_imovel: string
     endereco: string
     bairro: string
+    imobiliaria?: {
+      id: string
+      nome: string
+      tipo_repasse?: 'mensal' | 'quinzenal' | 'semanal' | 'por_servico' | null
+      prazo_repasse_dias?: number | null
+    } | null
   }
   inquilino: {
     nome: string
@@ -80,6 +87,88 @@ function desformatarMoeda(valorStr: string): number {
   return parseFloat(limpo) || 0
 }
 
+// Calcula a data de repasse com base no tipo de repasse e prazos
+function calcularDataRepasse(
+  dataConclusaoStr: string | null | undefined,
+  tipoRepasse: 'mensal' | 'quinzenal' | 'semanal' | 'por_servico' | null | undefined,
+  prazoRepasseDias: number | null | undefined
+): Date | null {
+  if (!dataConclusaoStr) return null
+  const dataConclusao = new Date(dataConclusaoStr)
+  if (isNaN(dataConclusao.getTime())) return null
+
+  const tipo = tipoRepasse || 'por_servico'
+  const prazo = prazoRepasseDias || 0
+
+  let dataRepasse = new Date(dataConclusao)
+
+  if (tipo === 'por_servico') {
+    dataRepasse.setDate(dataRepasse.getDate() + prazo)
+  } else if (tipo === 'semanal') {
+    // Fechamento da semana é o domingo
+    const diaSemana = dataConclusao.getDay()
+    const diasAteDomingo = (7 - diaSemana) % 7
+    dataRepasse.setDate(dataRepasse.getDate() + diasAteDomingo + prazo)
+  } else if (tipo === 'quinzenal') {
+    // Fechamento da quinzena: dia 15 ou último dia do mês
+    const dia = dataConclusao.getDate()
+    if (dia <= 15) {
+      dataRepasse = new Date(dataConclusao.getFullYear(), dataConclusao.getMonth(), 15 + prazo)
+    } else {
+      const ultimoDia = new Date(dataConclusao.getFullYear(), dataConclusao.getMonth() + 1, 0).getDate()
+      dataRepasse = new Date(dataConclusao.getFullYear(), dataConclusao.getMonth(), ultimoDia + prazo)
+    }
+  } else if (tipo === 'mensal') {
+    // Dia X do mês seguinte
+    const ano = dataConclusao.getFullYear()
+    const mes = dataConclusao.getMonth()
+    let mesSeguinte = mes + 1
+    let anoSeguinte = ano
+    if (mesSeguinte > 11) {
+      mesSeguinte = 0
+      anoSeguinte += 1
+    }
+    const ultimoDiaMesSeguinte = new Date(anoSeguinte, mesSeguinte + 1, 0).getDate()
+    const diaRepasse = Math.min(prazo, ultimoDiaMesSeguinte)
+    dataRepasse = new Date(anoSeguinte, mesSeguinte, diaRepasse)
+  }
+
+  // Zera as horas para comparação correta
+  dataRepasse.setHours(0, 0, 0, 0)
+  return dataRepasse
+}
+
+// Formata a condição de repasse de forma legível (pt-BR)
+function formatarCondicaoRepasse(
+  tipoRepasse: 'mensal' | 'quinzenal' | 'semanal' | 'por_servico' | null | undefined,
+  prazoRepasseDias: number | null | undefined
+): string {
+  if (!tipoRepasse) return "Não configurado"
+  const prazo = prazoRepasseDias || 0
+  switch (tipoRepasse) {
+    case 'mensal':
+      return `Mensal (Dia ${prazo})`
+    case 'quinzenal':
+      return `Quinzenal (${prazo} dias pós-quinzena)`
+    case 'semanal':
+      return `Semanal (${prazo} dias pós-domingo)`
+    case 'por_servico':
+      return `Por Serviço (${prazo} ${prazo === 1 ? 'dia' : 'dias'})`
+    default:
+      return "Não configurado"
+  }
+}
+
+// Formata uma data no padrão DD/MM/AAAA
+function formatarData(data: Date | null): string {
+  if (!data) return "-"
+  const dia = String(data.getDate()).padStart(2, '0')
+  const mes = String(data.getMonth() + 1).padStart(2, '0')
+  const ano = data.getFullYear()
+  return `${dia}/${mes}/${ano}`
+}
+
+
 export default function PrestadorDashboard() {
   const { user, perfil } = useAuth()
   
@@ -90,6 +179,7 @@ export default function PrestadorDashboard() {
   const [chamadosPendentes, setChamadosPendentes] = useState<Chamado[]>([])
   const [osAtivas, setOsAtivas] = useState<Chamado[]>([])
   const [financeiroChamados, setFinanceiroChamados] = useState<Chamado[]>([])
+  const [empresaMae, setEmpresaMae] = useState<any | null>(null)
   
   // Lista de técnicos da equipe (Empresa PJ)
   const [tecnicosDisponiveis, setTecnicosDisponiveis] = useState<{ id: string; nome: string }[]>([])
@@ -203,6 +293,51 @@ export default function PrestadorDashboard() {
         if (osError) throw osError
         setOsAtivas(osData as unknown as Chamado[] || [])
 
+        // 3. Busca dados para o painel financeiro (Técnico PF)
+        const { data: finData, error: finError } = await supabase
+          .from("chamados")
+          .select(`
+            *,
+            imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (id, nome, tipo_repasse, prazo_repasse_dias)),
+            inquilino:inquilino_id (nome),
+            orcamentos (
+              id,
+              valor_servico_r$,
+              valor_materiais_r$,
+              valor_servico_tecnico_r$,
+              valor_materiais_tecnico_r$,
+              responsavel_material_tecnico,
+              responsavel_material_empresa,
+              homologado_pela_empresa,
+              prestador_id
+            ),
+            chamados_midias:chamados_midias (*)
+          `)
+          .eq("tecnico_id", user?.id)
+          .in("status", ["servico_concluido", "encerrado"])
+          .order("criado_em", { ascending: false })
+
+        if (finError) throw finError
+
+        // Filtra para ter apenas chamados que possuem orçamento homologado
+        const chamadosComOrcamento = (finData || []).filter((c: any) => 
+          c.orcamentos && c.orcamentos.some((o: any) => o.homologado_pela_empresa)
+        )
+        setFinanceiroChamados(chamadosComOrcamento as unknown as Chamado[])
+
+        // 4. Busca os dados da Empresa Mãe
+        if (perfil?.empresa_mae_id) {
+          const { data: maeData, error: maeError } = await supabase
+            .from("perfis")
+            .select("*")
+            .eq("id", perfil.empresa_mae_id)
+            .single()
+          
+          if (!maeError && maeData) {
+            setEmpresaMae(maeData)
+          }
+        }
+
       } else {
         // ================= FLUXO EMPRESA PRESTADORA PJ =================
         // 1. Busca todos os chamados enviados à empresa prestadora PJ em status 'aguardando_orcamento'
@@ -281,7 +416,7 @@ export default function PrestadorDashboard() {
           .from("chamados")
           .select(`
             *,
-            imovel:imovel_id (codigo_imovel, endereco, bairro),
+            imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (id, nome, tipo_repasse, prazo_repasse_dias)),
             inquilino:inquilino_id (nome),
             tecnico:tecnico_id (id, nome),
             orcamentos (
@@ -700,7 +835,7 @@ export default function PrestadorDashboard() {
       )}
 
       {/* Abas PWA */}
-      <div className={`grid ${ehTecnico ? 'grid-cols-2' : 'grid-cols-3'} gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6`}>
+      <div className="grid grid-cols-3 gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6">
         <button
           onClick={() => { 
             setActiveTab("orcamentos")
@@ -733,24 +868,22 @@ export default function PrestadorDashboard() {
         >
           OS Ativas ({osAtivas.length})
         </button>
-        {!ehTecnico && (
-          <button
-            onClick={() => { 
-              setActiveTab("financeiro")
-              setChamadoCotando(null)
-              setChamadoConcluindo(null)
-              setChamadoDelegando(null)
-              setChamadoHomologando(null)
-            }}
-            className={`py-2 text-xs font-bold rounded-md transition-all ${
-              activeTab === "financeiro" 
-                ? "bg-white text-occasio-navy shadow-sm" 
-                : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            Financeiro
-          </button>
-        )}
+        <button
+          onClick={() => { 
+            setActiveTab("financeiro")
+            setChamadoCotando(null)
+            setChamadoConcluindo(null)
+            setChamadoDelegando(null)
+            setChamadoHomologando(null)
+          }}
+          className={`py-2 text-xs font-bold rounded-md transition-all ${
+            activeTab === "financeiro" 
+              ? "bg-white text-occasio-navy shadow-sm" 
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Financeiro
+        </button>
       </div>
 
       {loading ? (
@@ -1608,21 +1741,47 @@ export default function PrestadorDashboard() {
 
       {/* ======================== ABA 3: PAINEL FINANCEIRO (PJ) ======================== */}
       {activeTab === "financeiro" && !ehTecnico && (() => {
-        // Cálculos financeiros gerais
-        const totalReceber = financeiroChamados.reduce((acc, chamado) => {
+        // Cálculos financeiros gerais otimizados com regras de repasse
+        const hoje = new Date()
+        hoje.setHours(0, 0, 0, 0)
+
+        let aReceberVencido = 0
+        let aReceberAVencer = 0
+        let aPagarVencido = 0
+        let aPagarAVencer = 0
+
+        financeiroChamados.forEach((chamado) => {
           const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
-          if (!orc) return acc
+          if (!orc) return
+
+          // 1. A Receber (da Imobiliária)
           const matReceber = orc.responsavel_material_empresa === 'empresa' ? orc.valor_materiais_r$ : 0
-          return acc + orc.valor_servico_r$ + matReceber
-        }, 0)
+          const recTotal = orc.valor_servico_r$ + matReceber
 
-        const totalPagar = financeiroChamados.reduce((acc, chamado) => {
-          const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
-          if (!orc) return acc
+          const dataConcl = chamado.data_conclusao || chamado.criado_em
+          const dtReceber = calcularDataRepasse(dataConcl, chamado.imovel?.imobiliaria?.tipo_repasse, chamado.imovel?.imobiliaria?.prazo_repasse_dias)
+
+          if (dtReceber && dtReceber < hoje) {
+            aReceberVencido += recTotal
+          } else {
+            aReceberAVencer += recTotal
+          }
+
+          // 2. A Pagar (ao Técnico)
           const matPagar = orc.responsavel_material_tecnico === 'tecnico' ? (orc.valor_materiais_tecnico_r$ || 0) : 0
-          return acc + (orc.valor_servico_tecnico_r$ || 0) + matPagar
-        }, 0)
+          const pagTotal = (orc.valor_servico_tecnico_r$ || 0) + matPagar
 
+          const dtPagar = calcularDataRepasse(dataConcl, perfil?.tipo_repasse, perfil?.prazo_repasse_dias)
+
+          if (dtPagar && dtPagar < hoje) {
+            aPagarVencido += pagTotal
+          } else {
+            aPagarAVencer += pagTotal
+          }
+        })
+
+        const totalReceber = aReceberVencido + aReceberAVencer
+        const totalPagar = aPagarVencido + aPagarAVencer
         const margemLucro = totalReceber - totalPagar
 
         return (
@@ -1634,8 +1793,18 @@ export default function PrestadorDashboard() {
                   <span className="text-[9px] font-bold uppercase tracking-wider">A Receber</span>
                   <Coins className="h-3.5 w-3.5 text-green-500" />
                 </div>
-                <div className="mt-2">
-                  <span className="text-xs font-bold text-slate-800">R$ {totalReceber.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                <div className="mt-2 space-y-1">
+                  <div className="text-xs font-bold text-slate-800">
+                    R$ {totalReceber.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="flex flex-col text-[8px] text-slate-400">
+                    <span className={aReceberVencido > 0 ? "text-red-500 font-bold" : ""}>
+                      Vencido: R$ {aReceberVencido.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                    <span>
+                      A Vencer: R$ {aReceberAVencer.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1644,8 +1813,18 @@ export default function PrestadorDashboard() {
                   <span className="text-[9px] font-bold uppercase tracking-wider">A Pagar</span>
                   <User className="h-3.5 w-3.5 text-blue-500" />
                 </div>
-                <div className="mt-2">
-                  <span className="text-xs font-bold text-slate-800">R$ {totalPagar.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                <div className="mt-2 space-y-1">
+                  <div className="text-xs font-bold text-slate-800">
+                    R$ {totalPagar.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="flex flex-col text-[8px] text-slate-400">
+                    <span className={aPagarVencido > 0 ? "text-red-500 font-bold" : ""}>
+                      Vencido: R$ {aPagarVencido.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                    <span>
+                      A Vencer: R$ {aPagarAVencer.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1654,10 +1833,13 @@ export default function PrestadorDashboard() {
                   <span className="text-[9px] font-bold uppercase tracking-wider">Lucro Est.</span>
                   <TrendingUp className="h-3.5 w-3.5 text-occasio-blue" />
                 </div>
-                <div className="mt-2">
-                  <span className={`text-xs font-extrabold ${margemLucro >= 0 ? "text-green-600" : "text-red-600"}`}>
+                <div className="mt-2 space-y-1">
+                  <div className={`text-xs font-extrabold ${margemLucro >= 0 ? "text-green-600" : "text-red-600"}`}>
                     R$ {margemLucro.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </span>
+                  </div>
+                  <div className="text-[8px] text-slate-400 italic">
+                    Margem Líquida
+                  </div>
                 </div>
               </div>
             </div>
@@ -1684,6 +1866,19 @@ export default function PrestadorDashboard() {
                   const pagTotal = (orc.valor_servico_tecnico_r$ || 0) + matPagar
 
                   const lucroItem = recTotal - pagTotal
+
+                  const dataConcl = chamado.data_conclusao || chamado.criado_em
+                  const dtReceber = calcularDataRepasse(dataConcl, chamado.imovel?.imobiliaria?.tipo_repasse, chamado.imovel?.imobiliaria?.prazo_repasse_dias)
+                  const dtPagar = calcularDataRepasse(dataConcl, perfil?.tipo_repasse, perfil?.prazo_repasse_dias)
+
+                  const strReceber = formatarData(dtReceber)
+                  const strPagar = formatarData(dtPagar)
+
+                  const condReceber = formatarCondicaoRepasse(chamado.imovel?.imobiliaria?.tipo_repasse, chamado.imovel?.imobiliaria?.prazo_repasse_dias)
+                  const condPagar = formatarCondicaoRepasse(perfil?.tipo_repasse, perfil?.prazo_repasse_dias)
+
+                  const isReceberVencido = dtReceber && dtReceber < hoje
+                  const isPagarVencido = dtPagar && dtPagar < hoje
 
                   // Status amigável
                   let statusColor = "bg-slate-100 text-slate-700"
@@ -1724,6 +1919,12 @@ export default function PrestadorDashboard() {
                           {/* Bloco Cliente */}
                           <div className="bg-slate-50/50 p-2.5 rounded border border-slate-100 space-y-1">
                             <span className="block font-bold text-[9px] text-slate-500 uppercase">Imobiliária (A Receber)</span>
+                            <div className="text-[10px] text-slate-600 bg-white p-1.5 rounded border border-slate-100 flex flex-col space-y-0.5 mb-1.5">
+                              <span>Acerto: <strong>{condReceber}</strong></span>
+                              <span className={isReceberVencido ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
+                                Previsão: <strong>{strReceber} {isReceberVencido && "(Vencido)"}</strong>
+                              </span>
+                            </div>
                             <div className="flex justify-between">
                               <span>Mão de Obra:</span>
                               <span className="font-semibold">R$ {orc.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
@@ -1746,6 +1947,12 @@ export default function PrestadorDashboard() {
                           {/* Bloco Técnico */}
                           <div className="bg-slate-50/50 p-2.5 rounded border border-slate-100 space-y-1">
                             <span className="block font-bold text-[9px] text-slate-500 uppercase">Técnico (A Pagar)</span>
+                            <div className="text-[10px] text-slate-600 bg-white p-1.5 rounded border border-slate-100 flex flex-col space-y-0.5 mb-1.5">
+                              <span>Acerto: <strong>{condPagar}</strong></span>
+                              <span className={isPagarVencido ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
+                                Previsão: <strong>{strPagar} {isPagarVencido && "(Vencido)"}</strong>
+                              </span>
+                            </div>
                             <div className="flex justify-between">
                               <span>Mão de Obra:</span>
                               <span className="font-semibold">R$ {(orc.valor_servico_tecnico_r$ || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
@@ -1772,6 +1979,177 @@ export default function PrestadorDashboard() {
                           <span className={`font-extrabold ${lucroItem >= 0 ? "text-green-600" : "text-red-600"}`}>
                             {lucroItem >= 0 ? "+" : ""} R$ {lucroItem.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                           </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ======================== ABA 3: PAINEL FINANCEIRO (PF - TÉCNICO) ======================== */}
+      {activeTab === "financeiro" && ehTecnico && (() => {
+        // Ganhos do técnico PF (repasses da Empresa Mãe)
+        const hoje = new Date()
+        hoje.setHours(0, 0, 0, 0)
+
+        let aReceberVencido = 0
+        let aReceberAVencer = 0
+
+        financeiroChamados.forEach((chamado) => {
+          const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+          if (!orc) return
+
+          // Ganhos do técnico: Mão de Obra + Reembolso de materiais (se comprou do próprio bolso)
+          const matPagar = orc.responsavel_material_tecnico === 'tecnico' ? (orc.valor_materiais_tecnico_r$ || 0) : 0
+          const recTotal = (orc.valor_servico_tecnico_r$ || 0) + matPagar
+
+          const dataConcl = chamado.data_conclusao || chamado.criado_em
+          const dtReceber = calcularDataRepasse(dataConcl, empresaMae?.tipo_repasse, empresaMae?.prazo_repasse_dias)
+
+          if (dtReceber && dtReceber < hoje) {
+            aReceberVencido += recTotal
+          } else {
+            aReceberAVencer += recTotal
+          }
+        })
+
+        const totalReceber = aReceberVencido + aReceberAVencer
+        const condEmpresaMae = formatarCondicaoRepasse(empresaMae?.tipo_repasse, empresaMae?.prazo_repasse_dias)
+
+        return (
+          <div className="space-y-6">
+            {/* Cards de Resumo */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[9px] font-bold uppercase tracking-wider">A Receber</span>
+                  <Coins className="h-3.5 w-3.5 text-green-500" />
+                </div>
+                <div className="mt-2">
+                  <span className="text-xs font-bold text-slate-800">R$ {totalReceber.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[9px] font-bold uppercase tracking-wider">Vencido</span>
+                  <AlertCircle className={`h-3.5 w-3.5 ${aReceberVencido > 0 ? "text-red-500" : "text-slate-300"}`} />
+                </div>
+                <div className="mt-2">
+                  <span className={`text-xs font-bold ${aReceberVencido > 0 ? "text-red-500" : "text-slate-800"}`}>
+                    R$ {aReceberVencido.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[9px] font-bold uppercase tracking-wider">A Vencer</span>
+                  <TrendingUp className="h-3.5 w-3.5 text-green-500" />
+                </div>
+                <div className="mt-2">
+                  <span className="text-xs font-bold text-slate-800">R$ {aReceberAVencer.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Condição de Acerto com a Empresa Mãe */}
+            <Card className="border-slate-200 shadow-sm bg-white">
+              <CardContent className="p-3 flex items-center justify-between text-xs">
+                <div>
+                  <span className="block font-bold text-[9px] text-slate-400 uppercase">Empresa Contratante</span>
+                  <span className="font-extrabold text-occasio-navy">{empresaMae?.nome || "Não configurada"}</span>
+                </div>
+                <div className="text-right">
+                  <span className="block font-bold text-[9px] text-slate-400 uppercase">Regra de Acerto</span>
+                  <Badge className="bg-blue-50 text-blue-800 border-blue-200 border text-[10px] font-bold mt-0.5">
+                    {condEmpresaMae}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Lista de OS Concluídas */}
+            <div className="space-y-4">
+              {financeiroChamados.length === 0 ? (
+                <div className="text-center py-16 text-slate-400 bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center gap-3">
+                  <Coins className="h-10 w-10 text-slate-300" />
+                  <div className="font-semibold text-slate-500">Nenhuma OS finalizada</div>
+                  <p className="max-w-xs mx-auto text-[11px] text-slate-400">
+                    As OS concluídas ou encerradas aparecerão aqui com as previsões de pagamento correspondentes.
+                  </p>
+                </div>
+              ) : (
+                financeiroChamados.map((chamado) => {
+                  const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+                  if (!orc) return null
+
+                  const matPagar = orc.responsavel_material_tecnico === 'tecnico' ? (orc.valor_materiais_tecnico_r$ || 0) : 0
+                  const recTotal = (orc.valor_servico_tecnico_r$ || 0) + matPagar
+
+                  const dataConcl = chamado.data_conclusao || chamado.criado_em
+                  const dtReceber = calcularDataRepasse(dataConcl, empresaMae?.tipo_repasse, empresaMae?.prazo_repasse_dias)
+
+                  const strReceber = formatarData(dtReceber)
+                  const isReceberVencido = dtReceber && dtReceber < hoje
+
+                  let statusColor = "bg-slate-100 text-slate-700"
+                  let statusTexto = chamado.status as string
+                  if (chamado.status === "servico_concluido") {
+                    statusColor = "bg-green-50 text-green-800 border-green-200"
+                    statusTexto = "Serviço Concluído"
+                  } else if (chamado.status === "encerrado") {
+                    statusColor = "bg-blue-50 text-blue-800 border-blue-200"
+                    statusTexto = "OS Encerrada"
+                  }
+
+                  return (
+                    <Card key={chamado.id} className="border-slate-200 shadow-sm bg-white">
+                      <CardContent className="p-4 space-y-3 text-xs">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                              {chamado.imovel?.codigo_imovel || "Sem Código"}
+                            </span>
+                            <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
+                          </div>
+                          <Badge className={`${statusColor} border text-[9px] font-bold uppercase`}>
+                            {statusTexto}
+                          </Badge>
+                        </div>
+
+                        <div className="text-[10px] text-slate-500 flex justify-between items-center bg-slate-50 p-2 rounded">
+                          <span>Conclusão: <strong>{formatarData(dataConcl ? new Date(dataConcl) : null)}</strong></span>
+                          <span className={isReceberVencido ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
+                            Previsão: <strong>{strReceber} {isReceberVencido && "(Vencido)"}</strong>
+                          </span>
+                        </div>
+
+                        {/* Detalhamento de valores */}
+                        <div className="bg-slate-50/50 p-2.5 rounded border border-slate-100 space-y-1">
+                          <div className="flex justify-between">
+                            <span>Mão de Obra (Serviço):</span>
+                            <span className="font-semibold text-slate-800">
+                              R$ {(orc.valor_servico_tecnico_r$ || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Materiais Comprados:</span>
+                            <span className="font-semibold text-slate-600">
+                              R$ {matPagar.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div className="text-[9px] text-slate-400 italic">
+                            Reembolso de materiais: {orc.responsavel_material_tecnico === 'tecnico' ? "Sim (pago pelo Técnico)" : "Não (pago pela Empresa)"}
+                          </div>
+                          <div className="flex justify-between border-t border-dashed pt-1.5 font-bold text-occasio-navy text-sm">
+                            <span>Total a Receber:</span>
+                            <span>R$ {recTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
