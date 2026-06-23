@@ -67,6 +67,7 @@ function MainLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const isHome = location.pathname === "/"
+  const isLogin = location.pathname === "/login" || location.pathname === "/login-teste"
   const { user, perfil, signOut } = useAuth()
 
   // Ação de clique na logo (rola para o topo se já estiver na home, senão vai para a home)
@@ -94,7 +95,7 @@ function MainLayout() {
           
           {/* Navegação de Links (detecta rota atual para redirecionamento correto) */}
           <nav className="hidden md:flex gap-8 text-sm font-medium text-slate-600 items-center">
-            {!user && (
+            {!user && !isLogin && (
               <>
                 {isHome ? (
                   <a href="#features" className="hover:text-occasio-blue transition-colors">Funcionalidades</a>
@@ -186,7 +187,7 @@ function MainLayout() {
               </Link>
             )}
             
-            {!user && (
+            {!user && !isLogin && (
               isHome ? (
                 <a href="#features" className="hover:text-occasio-blue transition-colors">Como Funciona</a>
               ) : (
@@ -228,7 +229,7 @@ function MainLayout() {
                 Entrar
               </Button>
             )}
-            {!user && (
+            {!user && !isLogin && (
               <Button className="bg-occasio-blue hover:bg-occasio-navy text-white shadow-lg shadow-occasio-blue/20 transition-all text-xs sm:text-sm px-3 sm:px-4">
                 Agendar Demo
               </Button>
