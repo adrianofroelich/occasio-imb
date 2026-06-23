@@ -190,7 +190,7 @@ export default function Login() {
           </div>
 
           {/* Lado Central: Formulário de Login (Card) */}
-          <div className="lg:col-span-5 flex justify-center animate-in fade-in zoom-in duration-700 order-1 lg:order-none">
+          <div className="lg:col-span-4 flex justify-center animate-in fade-in zoom-in duration-700 order-1 lg:order-none">
             <Card className="w-full max-w-sm border-slate-200 shadow-xl shadow-slate-100 bg-white overflow-hidden hover:shadow-2xl transition-shadow duration-300">
               <CardHeader className="p-6 pb-2 text-center border-b border-slate-50">
                 <CardTitle className="text-lg font-black text-occasio-navy">Acessar o Sistema</CardTitle>
@@ -275,7 +275,7 @@ export default function Login() {
                 </form>
 
                 <div className="text-center pt-3 border-t border-slate-100">
-                  <p className="text-[9px] text-slate-400 leading-relaxed">
+                  <p className="text-xs text-black font-semibold leading-relaxed">
                     Acesso restrito para inquilinos, proprietários, prestadores de serviço e imobiliárias credenciadas.
                   </p>
                 </div>
@@ -285,7 +285,7 @@ export default function Login() {
           </div>
 
           {/* Lado Direito: Mascote Técnico (Personagem 6) */}
-          <div className="lg:col-span-3 flex justify-center animate-in fade-in slide-in-from-right duration-700 order-3 lg:order-none">
+          <div className="lg:col-span-4 flex justify-center animate-in fade-in slide-in-from-right duration-700 order-3 lg:order-none">
             <div className="relative group">
               <div className="absolute inset-0 bg-yellow-500/15 rounded-full blur-2xl group-hover:bg-yellow-500/25 transition-all duration-500 scale-75"></div>
               <img 
