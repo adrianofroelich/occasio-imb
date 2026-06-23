@@ -130,7 +130,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-[85vh] bg-white flex flex-col items-center justify-center px-4 py-8 md:py-12 overflow-hidden relative">
+    <div className="min-h-[85vh] bg-[#EAE8E7] flex flex-col items-center justify-center px-4 py-8 md:py-12 overflow-hidden relative">
       {/* Elementos de fundo sutis */}
       <div className="absolute top-10 left-10 w-72 h-72 bg-occasio-blue/5 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-yellow-500/5 rounded-full blur-3xl pointer-events-none"></div>
