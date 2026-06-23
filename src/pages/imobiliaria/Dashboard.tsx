@@ -31,6 +31,7 @@ interface Chamado {
   status: StatusChamado
   responsabilidade: Responsabilidade
   criado_em: string
+  data_conclusao?: string | null
   imovel_id: string
   inquilino_id: string
   empresa_prestadora_id?: string | null
@@ -44,11 +45,27 @@ interface Chamado {
     nome: string
   }
   empresa_prestadora?: {
+    id: string
     nome: string
+    tipo_repasse?: 'mensal' | 'quinzenal' | 'semanal' | 'por_servico' | null
+    prazo_repasse_dias?: number | null
   } | null
   tecnico?: {
     nome: string
   } | null
+  orcamentos?: {
+    id: string
+    valor_servico_r$: number
+    valor_materiais_r$: number
+    valor_servico_tecnico_r$?: number | null
+    valor_materiais_tecnico_r$?: number | null
+    responsavel_material_tecnico?: 'tecnico' | 'empresa' | null
+    responsavel_material_empresa?: 'empresa' | 'imobiliaria' | 'proprietario' | null
+    prazo_execucao_dias: number
+    observacoes_tecnicas: string
+    homologado_pela_empresa: boolean
+    prestador_id: string
+  }[]
 }
 
 // Configurações visuais dos badges de status
@@ -73,6 +90,83 @@ const RESP_CONFIG: Record<Responsabilidade, { label: string; cor: string }> = {
   indefinido: { label: "Indefinido", cor: "bg-slate-300 text-slate-700" }
 }
 
+// Helper: calcula data prevista de repasse
+function calcularDataRepasse(
+  dataConclusaoStr: string | null | undefined,
+  tipoRepasse: 'mensal' | 'quinzenal' | 'semanal' | 'por_servico' | null | undefined,
+  prazoRepasseDias: number | null | undefined
+): Date | null {
+  if (!dataConclusaoStr) return null
+  const dataConclusao = new Date(dataConclusaoStr)
+  if (isNaN(dataConclusao.getTime())) return null
+
+  const tipo = tipoRepasse || 'por_servico'
+  const prazo = prazoRepasseDias || 0
+
+  let dataRepasse = new Date(dataConclusao)
+
+  if (tipo === 'por_servico') {
+    dataRepasse.setDate(dataRepasse.getDate() + prazo)
+  } else if (tipo === 'semanal') {
+    const diaSemana = dataConclusao.getDay()
+    const diasAteDomingo = (7 - diaSemana) % 7
+    dataRepasse.setDate(dataRepasse.getDate() + diasAteDomingo + prazo)
+  } else if (tipo === 'quinzenal') {
+    const dia = dataConclusao.getDate()
+    if (dia <= 15) {
+      dataRepasse = new Date(dataConclusao.getFullYear(), dataConclusao.getMonth(), 15 + prazo)
+    } else {
+      const ultimoDia = new Date(dataConclusao.getFullYear(), dataConclusao.getMonth() + 1, 0).getDate()
+      dataRepasse = new Date(dataConclusao.getFullYear(), dataConclusao.getMonth(), ultimoDia + prazo)
+    }
+  } else if (tipo === 'mensal') {
+    const ano = dataConclusao.getFullYear()
+    const mes = dataConclusao.getMonth()
+    let mesSeguinte = mes + 1
+    let anoSeguinte = ano
+    if (mesSeguinte > 11) {
+      mesSeguinte = 0
+      anoSeguinte += 1
+    }
+    const ultimoDiaMesSeguinte = new Date(anoSeguinte, mesSeguinte + 1, 0).getDate()
+    const diaRepasse = Math.min(prazo, ultimoDiaMesSeguinte)
+    dataRepasse = new Date(anoSeguinte, mesSeguinte, diaRepasse)
+  }
+
+  dataRepasse.setHours(0, 0, 0, 0)
+  return dataRepasse
+}
+
+// Helper: formata termo de repasse
+function formatarCondicaoRepasse(
+  tipoRepasse: 'mensal' | 'quinzenal' | 'semanal' | 'por_servico' | null | undefined,
+  prazoRepasseDias: number | null | undefined
+): string {
+  if (!tipoRepasse) return "Não configurado"
+  const prazo = prazoRepasseDias || 0
+  switch (tipoRepasse) {
+    case 'mensal':
+      return `Mensal (Dia ${prazo})`
+    case 'quinzenal':
+      return `Quinzenal (${prazo} dias pós-quinzena)`
+    case 'semanal':
+      return `Semanal (${prazo} dias pós-domingo)`
+    case 'por_servico':
+      return `Por Serviço (${prazo} ${prazo === 1 ? 'dia' : 'dias'})`
+    default:
+      return "Não configurado"
+  }
+}
+
+// Helper: formata data
+function formatarData(data: Date | null): string {
+  if (!data) return "-"
+  const dia = String(data.getDate()).padStart(2, '0')
+  const mes = String(data.getMonth() + 1).padStart(2, '0')
+  const ano = data.getFullYear()
+  return `${dia}/${mes}/${ano}`
+}
+
 export default function Dashboard() {
   const { user, perfil } = useAuth()
   
@@ -81,6 +175,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [realtimeLoading, setRealtimeLoading] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+
+  // Estados da Aba Financeira e seus filtros
+  const [activeTab, setActiveTab] = useState<"chamados" | "financeiro">("chamados")
+  const [filtroFinanceiroStatus, setFiltroFinanceiroStatus] = useState<"todos" | "pendente" | "pago">("todos")
+  const [filtroFinanceiroPrestador, setFiltroFinanceiroPrestador] = useState<string>("todos")
+  const [extratoProprietarioAtivo, setExtratoProprietarioAtivo] = useState<Chamado | null>(null)
+  const [chamadosPagos, setChamadosPagos] = useState<string[]>([])
 
   // Estados para abertura de chamado pela imobiliária
   const [formChamadoAberto, setFormChamadoAberto] = useState(false)
@@ -362,8 +463,21 @@ export default function Dashboard() {
           *,
           imovel:imovel_id (codigo_imovel, endereco, limite_alcada_r$),
           inquilino:inquilino_id (nome),
-          empresa_prestadora:empresa_prestadora_id (nome),
-          tecnico:tecnico_id (nome)
+          empresa_prestadora:empresa_prestadora_id (id, nome, tipo_repasse, prazo_repasse_dias),
+          tecnico:tecnico_id (nome),
+          orcamentos (
+            id,
+            valor_servico_r$,
+            valor_materiais_r$,
+            valor_servico_tecnico_r$,
+            valor_materiais_tecnico_r$,
+            responsavel_material_tecnico,
+            responsavel_material_empresa,
+            prazo_execucao_dias,
+            observacoes_tecnicas,
+            homologado_pela_empresa,
+            prestador_id
+          )
         `)
         .order("criado_em", { ascending: false })
 
@@ -685,6 +799,30 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Abas de Navegação (Chamados vs Financeiro) */}
+      <div className="grid grid-cols-2 gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6 max-w-md">
+        <button
+          onClick={() => setActiveTab("chamados")}
+          className={`py-2 text-xs font-bold rounded-md transition-all ${
+            activeTab === "chamados"
+              ? "bg-white text-occasio-navy shadow-sm"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Chamados Ativos ({chamados.filter(c => c.status !== 'servico_concluido' && c.status !== 'encerrado').length})
+        </button>
+        <button
+          onClick={() => setActiveTab("financeiro")}
+          className={`py-2 text-xs font-bold rounded-md transition-all ${
+            activeTab === "financeiro"
+              ? "bg-white text-occasio-navy shadow-sm"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Financeiro / Repasses
+        </button>
+      </div>
+
       {erro && (
         <Alert variant="destructive" className="mb-6 bg-red-50 border-red-200 text-red-800">
           <AlertCircle className="h-5 w-5 text-red-600" />
@@ -692,8 +830,10 @@ export default function Dashboard() {
         </Alert>
       )}
 
-      {/* Formulário de Abertura de Chamado pela Imobiliária */}
-      {formChamadoAberto && (
+      {activeTab === "chamados" && (
+        <>
+          {/* Formulário de Abertura de Chamado pela Imobiliária */}
+          {formChamadoAberto && (
         <Card className="mb-8 border-slate-200 shadow-md">
           <CardHeader className="bg-slate-50 border-b border-slate-200">
             <CardTitle className="text-occasio-navy text-lg flex items-center gap-2">
@@ -1321,6 +1461,344 @@ export default function Dashboard() {
         </div>
 
       </div>
+        </>
+      )}
+
+      {/* ======================== ABA FINANCEIRA DA IMOBILIÁRIA ======================== */}
+      {activeTab === "financeiro" && (() => {
+        const hoje = new Date()
+        hoje.setHours(0, 0, 0, 0)
+
+        // Filtra chamados concluídos ou encerrados que possuem orçamento homologado
+        const chamadosFinalizados = chamados.filter(c => {
+          if (c.status !== 'servico_concluido' && c.status !== 'encerrado') return false
+          return c.orcamentos && c.orcamentos.some(o => o.homologado_pela_empresa)
+        })
+
+        // Métricas de cabeçalho
+        const totalReceberProprietarios = chamadosFinalizados.reduce((acc, chamado) => {
+          const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+          if (!orc) return acc
+          if (orc.responsavel_material_empresa === 'proprietario') {
+            return acc + orc.valor_servico_r$ + orc.valor_materiais_r$
+          }
+          if (chamado.responsabilidade === 'proprietario') {
+            return acc + orc.valor_servico_r$
+          }
+          return acc
+        }, 0)
+
+        const totalPagarPrestadores = chamadosFinalizados.reduce((acc, chamado) => {
+          const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+          if (!orc) return acc
+          const matPagar = orc.responsavel_material_empresa === 'empresa' ? orc.valor_materiais_r$ : 0
+          return acc + orc.valor_servico_r$ + matPagar
+        }, 0)
+
+        const margemIntermediacao = totalReceberProprietarios - totalPagarPrestadores
+
+        // Filtra a lista de conciliação
+        const chamadosConciliacaoFiltrados = chamadosFinalizados.filter((chamado) => {
+          const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+          if (!orc) return false
+
+          const inPago = chamadosPagos.includes(chamado.id)
+          const atendeStatus = 
+            filtroFinanceiroStatus === "todos" ||
+            (filtroFinanceiroStatus === "pago" && inPago) ||
+            (filtroFinanceiroStatus === "pendente" && !inPago)
+
+          const atendePrestador =
+            filtroFinanceiroPrestador === "todos" ||
+            chamado.empresa_prestadora?.id === filtroFinanceiroPrestador
+
+          return atendeStatus && atendePrestador
+        })
+
+        // Lista de prestadoras únicas para o filtro
+        const prestadorasUnicas = Array.from(new Set(
+          chamadosFinalizados
+            .map(c => c.empresa_prestadora)
+            .filter((p): p is NonNullable<typeof p> => !!p)
+            .map(p => JSON.stringify({ id: p.id, nome: p.nome }))
+        )).map(str => JSON.parse(str as string))
+
+        return (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Métricas de Cabeçalho */}
+            <div className="grid md:grid-cols-3 gap-6">
+              <Card className="border-slate-200 shadow-sm bg-white">
+                <CardContent className="pt-6 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">A Receber (Proprietários)</p>
+                    <h3 className="text-xl font-black text-indigo-600 mt-1">
+                      R$ {totalReceberProprietarios.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </h3>
+                    <p className="text-[9px] text-slate-400 mt-1">Custos debitados do aluguel</p>
+                  </div>
+                  <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+                    <User className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200 shadow-sm bg-white">
+                <CardContent className="pt-6 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">A Pagar (Prestadores PJ)</p>
+                    <h3 className="text-xl font-black text-red-600 mt-1">
+                      R$ {totalPagarPrestadores.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </h3>
+                    <p className="text-[9px] text-slate-400 mt-1">Repasses homologados pendentes</p>
+                  </div>
+                  <div className="p-3 bg-red-50 text-red-600 rounded-lg">
+                    <Hammer className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200 shadow-sm bg-white">
+                <CardContent className="pt-6 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Saldo de Intermediação</p>
+                    <h3 className={`text-xl font-black mt-1 ${margemIntermediacao >= 0 ? "text-green-600" : "text-amber-600"}`}>
+                      R$ {margemIntermediacao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </h3>
+                    <p className="text-[9px] text-slate-400 mt-1">Balanço intermediado</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${margemIntermediacao >= 0 ? "bg-green-50 text-green-600" : "bg-amber-50 text-amber-600"}`}>
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Filtros Financeiros */}
+            <Card className="border-slate-200 shadow-sm bg-slate-50/50">
+              <CardContent className="py-4 flex flex-wrap gap-4 items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-slate-500" />
+                  <span className="text-xs font-semibold text-slate-700">Filtrar Lotes de Acerto:</span>
+                </div>
+                
+                <div className="flex flex-wrap gap-4 items-center flex-grow justify-end">
+                  <div>
+                    <select
+                      value={filtroFinanceiroStatus}
+                      onChange={(e) => setFiltroFinanceiroStatus(e.target.value as any)}
+                      className="border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                    >
+                      <option value="todos">Todos os Status</option>
+                      <option value="pendente">Pendentes (Não Pagos)</option>
+                      <option value="pago">Conciliados (Pagos)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <select
+                      value={filtroFinanceiroPrestador}
+                      onChange={(e) => setFiltroFinanceiroPrestador(e.target.value)}
+                      className="border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                    >
+                      <option value="todos">Todas as Prestadoras</option>
+                      {prestadorasUnicas.map(p => (
+                        <option key={p.id} value={p.id}>{p.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Tabela de Conciliação */}
+            <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <th className="py-3 px-4">Imóvel/OS</th>
+                      <th className="py-3 px-4">Proprietário (Devedor)</th>
+                      <th className="py-3 px-4">Prestadora PJ (Credor)</th>
+                      <th className="py-3 px-4">Regra / Previsão</th>
+                      <th className="py-3 px-4 text-right">A Receber (Prop)</th>
+                      <th className="py-3 px-4 text-right">A Pagar (PJ)</th>
+                      <th className="py-3 px-4 text-center">Status</th>
+                      <th className="py-3 px-4 text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {chamadosConciliacaoFiltrados.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="text-center py-10 text-slate-400">
+                          Nenhum chamado conciliável encontrado.
+                        </td>
+                      </tr>
+                    ) : (
+                      chamadosConciliacaoFiltrados.map((chamado) => {
+                        const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+                        if (!orc) return null
+
+                        const isPago = chamadosPagos.includes(chamado.id)
+
+                        // Valores
+                        const valReceber = orc.responsavel_material_empresa === 'proprietario' 
+                          ? orc.valor_servico_r$ + orc.valor_materiais_r$ 
+                          : (chamado.responsabilidade === 'proprietario' ? orc.valor_servico_r$ : 0)
+
+                        const valPagar = orc.valor_servico_r$ + (orc.responsavel_material_empresa === 'empresa' ? orc.valor_materiais_r$ : 0)
+
+                        // Prazos
+                        const dataConcl = chamado.data_conclusao || chamado.criado_em
+                        const dtRepasse = calcularDataRepasse(dataConcl, chamado.empresa_prestadora?.tipo_repasse, chamado.empresa_prestadora?.prazo_repasse_dias)
+                        const condRepasse = formatarCondicaoRepasse(chamado.empresa_prestadora?.tipo_repasse, chamado.empresa_prestadora?.prazo_repasse_dias)
+
+                        const isVencido = dtRepasse && dtRepasse < hoje && !isPago
+
+                        return (
+                          <tr key={chamado.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="py-3.5 px-4">
+                              <span className="bg-slate-100 text-slate-500 border px-1.5 py-0.5 rounded text-[9px] font-bold font-mono">
+                                {chamado.imovel?.codigo_imovel}
+                              </span>
+                              <div className="font-extrabold text-occasio-navy mt-1 max-w-[150px] truncate" title={chamado.titulo}>
+                                {chamado.titulo}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="font-semibold text-slate-700">Proprietário do Imóvel</div>
+                              <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{chamado.imovel?.endereco}</div>
+                            </td>
+                            <td className="py-3.5 px-4 font-semibold text-slate-700">
+                              {chamado.empresa_prestadora?.nome || "Não atribuído"}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="text-[10px] text-slate-500">{condRepasse}</div>
+                              <div className={`font-bold mt-0.5 ${isVencido ? "text-red-500" : "text-slate-700"}`}>
+                                {formatarData(dtRepasse)} {isVencido && <span className="text-[9px] font-extrabold">(VENCIDO)</span>}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-bold text-slate-700">
+                              R$ {valReceber.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-bold text-slate-700">
+                              R$ {valPagar.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <Badge className={`border text-[9px] font-extrabold uppercase ${
+                                isPago 
+                                  ? "bg-green-50 text-green-700 border-green-200" 
+                                  : (isVencido ? "bg-red-50 text-red-700 border-red-200" : "bg-yellow-50 text-yellow-700 border-yellow-200")
+                              }`}>
+                                {isPago ? "Pago" : (isVencido ? "Atrasado" : "Pendente")}
+                              </Badge>
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => setExtratoProprietarioAtivo(chamado)}
+                                  className="h-7 text-[10px] px-2 font-semibold bg-white text-occasio-blue border-slate-200 hover:bg-slate-50 hover:text-occasio-navy flex gap-1 items-center"
+                                >
+                                  <FileText className="h-3 w-3" /> Extrato
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    if (isPago) {
+                                      setChamadosPagos(prev => prev.filter(id => id !== chamado.id))
+                                    } else {
+                                      setChamadosPagos(prev => [...prev, chamado.id])
+                                    }
+                                  }}
+                                  className={`h-7 text-[10px] px-2 font-semibold text-white ${
+                                    isPago ? "bg-amber-500 hover:bg-amber-600" : "bg-green-600 hover:bg-green-700"
+                                  }`}
+                                >
+                                  {isPago ? "Pendente" : "Pagar"}
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        )
+      })()}
+
+      {/* Modal de Prestação de Contas (Extrato Proprietário) */}
+      {extratoProprietarioAtivo && (() => {
+        const chamado = extratoProprietarioAtivo
+        const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+        if (!orc) return null
+
+        const valorServico = orc.valor_servico_r$
+        const valorMateriais = orc.responsavel_material_empresa === 'proprietario' ? orc.valor_materiais_r$ : 0
+        const valorTotal = valorServico + valorMateriais
+
+        const textoExtrato = `================================================
+EXTRATO DE PRESTAÇÃO DE CONTAS - MANUTENÇÃO IMOBILIÁRIA
+================================================
+Código do Imóvel: ${chamado.imovel?.codigo_imovel || "N/A"}
+Endereço: ${chamado.imovel?.endereco || "N/A"}
+Chamado: ${chamado.titulo}
+Data de Conclusão: ${formatarData(chamado.data_conclusao ? new Date(chamado.data_conclusao) : new Date(chamado.criado_em))}
+------------------------------------------------
+DETALHAMENTO DOS CUSTOS:
+Mão de Obra / Serviço: R$ ${valorServico.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+Materiais (Proprietário): R$ ${valorMateriais.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+------------------------------------------------
+VALOR TOTAL A DESCONTAR NO ALUGUEL: R$ ${valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+================================================
+Extrato gerado eletronicamente para fins de conciliação.
+`
+
+        return (
+          <div className="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center p-4">
+            <Card className="max-w-md w-full border-slate-200 shadow-2xl bg-white animate-in zoom-in-95 duration-200">
+              <CardHeader className="bg-slate-50 border-b border-slate-200">
+                <CardTitle className="text-occasio-navy text-sm font-extrabold uppercase flex justify-between items-center">
+                  <span>Prestação de Contas</span>
+                  <button onClick={() => setExtratoProprietarioAtivo(null)} className="text-xs text-slate-400 hover:text-slate-600 font-bold">
+                    Fechar
+                  </button>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Resumo pronto para lançar desconto no extrato de aluguel do proprietário.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-4">
+                <div className="bg-slate-900 text-green-400 p-4 rounded font-mono text-[10px] whitespace-pre-wrap select-all leading-relaxed shadow-inner border border-slate-800">
+                  {textoExtrato}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      navigator.clipboard.writeText(textoExtrato)
+                      alert("Extrato copiado para a área de transferência!")
+                    }}
+                    className="flex-1 bg-occasio-blue hover:bg-occasio-navy text-white text-xs font-semibold"
+                  >
+                    Copiar Texto
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setExtratoProprietarioAtivo(null)}
+                    className="flex-1 border-slate-200 text-xs text-slate-600 hover:bg-slate-50 bg-white"
+                  >
+                    Fechar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )
+      })()}
 
       {/* Modal de Inspeção com Zoom Reativo */}
       {urlImagemZoom && (
@@ -1333,7 +1811,7 @@ export default function Dashboard() {
       {/* Modal de Laudo Técnico */}
       {mostrarLaudo && chamadoAtivo && (
         <LaudoTecnico 
-          chamado={chamadoAtivo}
+          chamado={chamadoAtivo as any}
           midias={midias}
           onClose={() => setMostrarLaudo(false)}
         />

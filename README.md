@@ -76,6 +76,12 @@ O sistema conta com um motor financeiro de repasse de valores para Prestadoras (
 - Apresenta as ordens de serviço concluídas com a previsão de recebimento de repasse baseado nos termos configurados no perfil da sua **Empresa Mãe**.
 - Exibe o consolidado de **Total**, **Vencido** e **A Vencer** com reembolso de materiais integrado.
 
+### Painel Financeiro da Imobiliária
+- **A Receber (Dos Proprietários)**: Soma de mão de obra e materiais das ordens de serviço concluídas/encerradas cuja responsabilidade financeira seja do Proprietário.
+- **A Pagar (Aos Prestadores PJ)**: Soma homologada a repassar às prestadoras parceiras (incluindo reembolsos de materiais comprados pela empresa).
+- **Extrato do Proprietário**: Cópia rápida em um clique de um demonstrativo textual mono-espaçado pronto para lançamento e desconto do aluguel do proprietário.
+- **Conciliação**: Filtro por status de conciliação (Pendente / Pago) e filtro inteligente por prestadora PJ credora.
+
 ---
 
 ## 📁 Estrutura de Pastas (Mapa do Projeto)
