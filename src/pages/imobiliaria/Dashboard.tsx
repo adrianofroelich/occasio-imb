@@ -669,10 +669,13 @@ export default function Dashboard() {
     setErro(null)
 
     try {
-      // 1. Atualiza o status do chamado para encerrado
+      // 1. Atualiza o status do chamado para encerrado e salva a responsabilidade financeira
+      const updates: any = { status: "encerrado" }
+      if (novaResponsabilidade) updates.responsabilidade = novaResponsabilidade
+
       const { error: chamadoError } = await supabase
         .from("chamados")
-        .update({ status: "encerrado" })
+        .update(updates)
         .eq("id", chamadoAtivo.id)
 
       if (chamadoError) throw chamadoError
@@ -1276,6 +1279,22 @@ export default function Dashboard() {
                       </p>
                     </div>
 
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                        Responsabilidade Financeira *
+                      </label>
+                      <select
+                        value={novaResponsabilidade}
+                        onChange={(e) => setNovaResponsabilidade(e.target.value as Responsabilidade)}
+                        required
+                        className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                      >
+                        <option value="indefinido">Indefinido (Em Análise)</option>
+                        <option value="proprietario">Proprietário (Depreciação Estrutural)</option>
+                        <option value="inquilino">Inquilino (Uso Inadequado/Mau Uso)</option>
+                      </select>
+                    </div>
+
                     <Button
                       type="button"
                       disabled={salvandoAcao}
@@ -1295,6 +1314,62 @@ export default function Dashboard() {
                       <p className="text-[11px] leading-relaxed">
                         Este chamado foi concluído e encerrado definitivamente. O laudo técnico com o comparativo de fotos do Antes e Depois está gerado e disponível para consulta.
                       </p>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-lg p-3.5 bg-slate-50/50 space-y-2.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-semibold text-slate-500 uppercase tracking-wider">Responsabilidade Financeira</span>
+                        <Badge className={`${RESP_CONFIG[chamadoAtivo.responsabilidade]?.cor || "bg-slate-300"} text-[10px] font-bold px-2 py-0.5 rounded`}>
+                          {RESP_CONFIG[chamadoAtivo.responsabilidade]?.label}
+                        </Badge>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <select
+                          value={novaResponsabilidade}
+                          onChange={(e) => setNovaResponsabilidade(e.target.value as Responsabilidade)}
+                          className="flex-1 border border-slate-200 rounded-md h-8 px-2 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                        >
+                          <option value="indefinido">Indefinido (Em Análise)</option>
+                          <option value="proprietario">Proprietário (Depreciação Estrutural)</option>
+                          <option value="inquilino">Inquilino (Uso Inadequado/Mau Uso)</option>
+                        </select>
+                        <Button
+                          type="button"
+                          disabled={salvandoAcao}
+                          onClick={async () => {
+                            if (!novaResponsabilidade) return
+                            setSalvandoAcao(true)
+                            setErro(null)
+                            try {
+                              const { error } = await supabase
+                                .from("chamados")
+                                .update({ responsabilidade: novaResponsabilidade })
+                                .eq("id", chamadoAtivo.id)
+                              if (error) throw error
+                              
+                              await supabase.from("historico_chamados").insert({
+                                chamado_id: chamadoAtivo.id,
+                                usuario_id: user?.id,
+                                status_anterior: chamadoAtivo.status,
+                                novo_status: chamadoAtivo.status,
+                                observacao: `Responsabilidade financeira alterada para ${RESP_CONFIG[novaResponsabilidade]?.label} por ${perfil?.nome}.`
+                              })
+
+                              await loadChamados()
+                              setChamadoAtivo(prev => prev ? { ...prev, responsabilidade: novaResponsabilidade } : null)
+                            } catch (err: any) {
+                              console.error(err)
+                              setErro(err.message || "Erro ao atualizar responsabilidade.")
+                            } finally {
+                              setSalvandoAcao(false)
+                            }
+                          }}
+                          className="bg-occasio-blue hover:bg-occasio-navy text-white text-xs h-8 px-3 font-semibold shadow-sm"
+                        >
+                          {salvandoAcao ? "Salvando..." : "Alterar"}
+                        </Button>
+                      </div>
                     </div>
 
                     <Button
