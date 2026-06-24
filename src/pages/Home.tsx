@@ -68,7 +68,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
             <Card className="border-slate-200 shadow-sm hover:shadow-xl hover:border-occasio-blue/30 transition-all group overflow-hidden">
               <CardContent className="p-8">
                 <div className="flex justify-center mb-6">
@@ -97,7 +97,7 @@ export default function Home() {
               </CardContent>
             </Card>
 
-            <Card className="border-slate-200 shadow-sm hover:shadow-xl hover:border-occasio-blue/30 transition-all group overflow-hidden md:col-span-2 lg:col-span-1">
+            <Card className="border-slate-200 shadow-sm hover:shadow-xl hover:border-occasio-blue/30 transition-all group overflow-hidden">
               <CardContent className="p-8">
                 <div className="flex justify-center mb-6">
                   <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 group-hover:bg-occasio-blue/10 transition-colors">
@@ -107,6 +107,20 @@ export default function Home() {
                 <h3 className="mb-3 text-xl font-bold text-occasio-navy text-center">Auditoria e Histórico</h3>
                 <p className="text-slate-600 leading-relaxed">
                   Relatórios completos de conclusão com fotos do antes e depois. Histórico imutável de manutenção salvo para o imóvel.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-sm hover:shadow-xl hover:border-occasio-blue/30 transition-all group overflow-hidden">
+              <CardContent className="p-8">
+                <div className="flex justify-center mb-6">
+                  <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 group-hover:bg-occasio-blue/10 transition-colors">
+                    <img src="/Personagem10.png" alt="Vistoria de Imóveis" className="w-16 h-16 object-contain group-hover:scale-110 transition-transform" />
+                  </div>
+                </div>
+                <h3 className="mb-3 text-xl font-bold text-occasio-navy text-center">Vistoria de Imóveis</h3>
+                <p className="text-slate-600 leading-relaxed">
+                  Laudos completos de entrada, saída e vistorias periódicas. Tenha segurança jurídica e controle total do estado de conservação.
                 </p>
               </CardContent>
             </Card>
