@@ -140,7 +140,7 @@ export default function Login() {
         {/* Cabeçalho superior com a logo e título */}
         <div className="text-center space-y-3 mb-8 animate-in fade-in slide-in-from-top duration-700">
           <div className="flex justify-center mb-2">
-            <img src="/logo.png" alt="Occasio.Imob" className="h-10 object-contain" />
+            <img src="/logo.png" alt="Occasio.Imob" className="h-20 object-contain" />
           </div>
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-occasio-blue/10 border border-occasio-blue/20 text-occasio-blue text-xs font-bold uppercase tracking-wider">
             <Sparkles className="h-3.5 w-3.5" />
