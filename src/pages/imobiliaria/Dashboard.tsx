@@ -835,6 +835,12 @@ export default function Dashboard() {
     setSalvandoAcao(true)
     setErro(null)
 
+    if (chamadosPagos.includes(chamadoAtivo.id)) {
+      setErro("Não é possível desfazer o encerramento de um chamado que já foi pago/conciliado.")
+      setSalvandoAcao(false)
+      return
+    }
+
     try {
       // 1. Busca o último registro de encerramento no histórico para saber o status anterior
       const { data: historicos, error: histQueryError } = await supabase
@@ -1602,12 +1608,12 @@ export default function Dashboard() {
 
                     <Button
                       type="button"
-                      disabled={salvandoAcao}
+                      disabled={salvandoAcao || chamadosPagos.includes(chamadoAtivo.id)}
                       variant="outline"
                       onClick={handleDesfazerEncerramento}
-                      className="w-full border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 text-[11px] font-bold h-9 flex items-center gap-1.5 justify-center shadow-sm"
+                      className="w-full border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 text-[11px] font-bold h-9 flex items-center gap-1.5 justify-center shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200"
                     >
-                      {salvandoAcao ? "Reabrindo..." : <>Desfazer Encerramento</>}
+                      {salvandoAcao ? "Reabrindo..." : (chamadosPagos.includes(chamadoAtivo.id) ? "Bloqueado: OS Paga" : "Desfazer Encerramento")}
                     </Button>
                   </div>
                 ) : (
