@@ -829,6 +829,61 @@ export default function Dashboard() {
     }
   }
 
+  // Desfaz o encerramento de um chamado, voltando-o ao status anterior
+  const handleDesfazerEncerramento = async () => {
+    if (!chamadoAtivo) return
+    setSalvandoAcao(true)
+    setErro(null)
+
+    try {
+      // 1. Busca o último registro de encerramento no histórico para saber o status anterior
+      const { data: historicos, error: histQueryError } = await supabase
+        .from("historico_chamados")
+        .select("status_anterior")
+        .eq("chamado_id", chamadoAtivo.id)
+        .eq("novo_status", "encerrado")
+        .order("criado_em", { ascending: false })
+        .limit(1)
+
+      if (histQueryError) throw histQueryError
+
+      // Se encontrar, volta ao status anterior. Caso contrário, assume "servico_concluido" como fallback seguro
+      const statusDestino = historicos && historicos.length > 0 ? historicos[0].status_anterior : "servico_concluido"
+
+      // 2. Atualiza o status do chamado
+      const { error: chamadoError } = await supabase
+        .from("chamados")
+        .update({ 
+          status: statusDestino,
+          responsabilidade: "indefinido"
+        })
+        .eq("id", chamadoAtivo.id)
+
+      if (chamadoError) throw chamadoError
+
+      // 3. Registra a reabertura no histórico
+      const { error: historicoError } = await supabase
+        .from("historico_chamados")
+        .insert({
+          chamado_id: chamadoAtivo.id,
+          usuario_id: user?.id,
+          status_anterior: "encerrado",
+          novo_status: statusDestino,
+          observacao: `Encerramento desfeito pela Imobiliária. Retornado ao status: ${statusDestino}. Responsabilidade Financeira retornada para Indefinido.`
+        })
+
+      if (historicoError) throw historicoError
+
+      setChamadoAtivo(null)
+      await loadChamados()
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro ao desfazer encerramento.")
+    } finally {
+      setSalvandoAcao(false)
+    }
+  }
+
   // Processa as atualizações de status ou responsabilidade de um chamado
   const handleAplicarAcao = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1543,6 +1598,16 @@ export default function Dashboard() {
                       className="w-full bg-occasio-blue hover:bg-occasio-navy text-white text-xs font-bold h-10 flex items-center gap-1.5 justify-center shadow"
                     >
                       <FileText className="h-4 w-4" /> Visualizar Laudo Técnico
+                    </Button>
+
+                    <Button
+                      type="button"
+                      disabled={salvandoAcao}
+                      variant="outline"
+                      onClick={handleDesfazerEncerramento}
+                      className="w-full border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 text-[11px] font-bold h-9 flex items-center gap-1.5 justify-center shadow-sm"
+                    >
+                      {salvandoAcao ? "Reabrindo..." : <>Desfazer Encerramento</>}
                     </Button>
                   </div>
                 ) : (
