@@ -789,10 +789,15 @@ export default function Dashboard() {
     setSalvandoAcao(true)
     setErro(null)
 
+    if (!novaResponsabilidade || novaResponsabilidade === "indefinido") {
+      setErro("Você precisa definir a Responsabilidade Financeira (Proprietário ou Inquilino) para encerrar o chamado.")
+      setSalvandoAcao(false)
+      return
+    }
+
     try {
       // 1. Atualiza o status do chamado para encerrado e salva a responsabilidade financeira
-      const updates: any = { status: "encerrado" }
-      if (novaResponsabilidade) updates.responsabilidade = novaResponsabilidade
+      const updates: any = { status: "encerrado", responsabilidade: novaResponsabilidade }
 
       const { error: chamadoError } = await supabase
         .from("chamados")
@@ -830,6 +835,12 @@ export default function Dashboard() {
     if (!chamadoAtivo) return
     setSalvandoAcao(true)
     setErro(null)
+
+    if (novoStatus === "encerrado" && (!novaResponsabilidade || novaResponsabilidade === "indefinido")) {
+      setErro("Você precisa definir a Responsabilidade Financeira (Proprietário ou Inquilino) para encerrar o chamado.")
+      setSalvandoAcao(false)
+      return
+    }
 
     try {
       const updates: any = {}
