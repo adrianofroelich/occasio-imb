@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, Hammer, AlertCircle,
-  User, UserCheck, FileText, Coins, TrendingUp, Calendar
+  User, UserCheck, FileText, Coins, TrendingUp, Calendar, Plus, Printer
 } from "lucide-react"
 
 // Tipagens locais
@@ -67,6 +67,8 @@ interface Chamado {
     url_storage: string
     tipo_midia: 'antes' | 'depois'
   }[]
+  status_financeiro_tecnico?: 'pendente' | 'pago' | null
+  fechamento_tecnico_id?: string | null
 }
 
 // Funções auxiliares para formatação de moeda brasileira (pt-BR)
@@ -181,6 +183,17 @@ export default function PrestadorDashboard() {
   const [osConcluidas, setOsConcluidas] = useState<Chamado[]>([])
   const [financeiroChamados, setFinanceiroChamados] = useState<Chamado[]>([])
   const [empresaMae, setEmpresaMae] = useState<any | null>(null)
+
+  // Estados para Fechamento de Técnicos e Conciliação
+  const [subAbaFinanceira, setSubAbaFinanceira] = useState<"pendentes" | "historico">("pendentes")
+  const [fechamentosTecnicos, setFechamentosTecnicos] = useState<any[]>([])
+  const [carregandoFechamentos, setCarregandoFechamentos] = useState(false)
+  const [fechamentoSelecionado, setFechamentoSelecionado] = useState<any | null>(null)
+  const [exibirModalNovoFechamento, setExibirModalNovoFechamento] = useState(false)
+  const [exibirModalDetalhesFechamento, setExibirModalDetalhesFechamento] = useState(false)
+  const [mesFechamento, setMesFechamento] = useState<number>(new Date().getMonth() + 1)
+  const [anoFechamento, setAnoFechamento] = useState<number>(new Date().getFullYear())
+  const [salvandoFechamento, setSalvandoFechamento] = useState(false)
 
   // Filtros para OS's Concluídas
   const [filtroMes, setFiltroMes] = useState<string>("")
@@ -464,9 +477,127 @@ export default function PrestadorDashboard() {
     }
   }
 
+  // Carrega os fechamentos de técnicos da prestadora
+  const loadFechamentosTecnicos = async () => {
+    if (!user) return
+    setCarregandoFechamentos(true)
+    try {
+      const { data, error } = await supabase
+        .from("fechamentos_tecnicos")
+        .select(`
+          *,
+          criado_por:criado_por ( nome )
+        `)
+        .eq("empresa_prestadora_id", user.id)
+        .order("ano", { ascending: false })
+        .order("mes", { ascending: false })
+
+      if (error) throw error
+      setFechamentosTecnicos(data || [])
+    } catch (err: any) {
+      console.error("Erro ao carregar fechamentos de técnicos:", err)
+    } finally {
+      setCarregandoFechamentos(false)
+    }
+  }
+
+  // Executa o fechamento mensal da equipe de técnicos
+  const handleExecutarFechamentoTecnicos = async () => {
+    setSalvandoFechamento(true)
+    setErro(null)
+
+    // 1. Filtra chamados elegíveis da equipe de técnicos para a competência
+    const chamadosElegiveis = financeiroChamados.filter(c => {
+      if (c.status !== 'servico_concluido' && c.status !== 'encerrado') return false
+      if (!c.tecnico_id) return false // Sem técnico designado
+      if (c.fechamento_tecnico_id) return false // Já fechado
+      
+      const dataRef = c.data_conclusao ? new Date(c.data_conclusao) : new Date(c.criado_em)
+      return dataRef.getMonth() + 1 === mesFechamento && dataRef.getFullYear() === anoFechamento
+    })
+
+    if (chamadosElegiveis.length === 0) {
+      alert("Nenhum chamado elegível com técnico designado encontrado para esta competência (Mês/Ano).")
+      setSalvandoFechamento(false)
+      return
+    }
+
+    // 2. Calcula os totais devidos aos técnicos
+    let totalPago = 0
+    chamadosElegiveis.forEach(c => {
+      const orc = c.orcamentos?.find(o => o.homologado_pela_empresa)
+      if (!orc) return
+      
+      const maoDeObra = Number(orc.valor_servico_tecnico_r$ || 0)
+      const reembolso = orc.responsavel_material_tecnico === 'tecnico' ? Number(orc.valor_materiais_tecnico_r$ || 0) : 0
+      totalPago += maoDeObra + reembolso
+    })
+
+    try {
+      // 3. Insere a competência na tabela fechamentos_tecnicos
+      const { data: novoFechamento, error: insertError } = await supabase
+        .from("fechamentos_tecnicos")
+        .insert({
+          mes: mesFechamento,
+          ano: anoFechamento,
+          total_pago_tecnicos: totalPago,
+          empresa_prestadora_id: user?.id,
+          criado_por: user?.id
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        if (insertError.code === '23505') {
+          throw new Error(`A competência ${String(mesFechamento).padStart(2, '0')}/${anoFechamento} já foi fechada anteriormente por esta prestadora!`)
+        }
+        throw insertError
+      }
+
+      // 4. Associa os chamados a esse fechamento e os marca como pagos
+      const chamadosIds = chamadosElegiveis.map(c => c.id)
+      const { error: updateError } = await supabase
+        .from("chamados")
+        .update({
+          fechamento_tecnico_id: novoFechamento.id,
+          status_financeiro_tecnico: 'pago'
+        })
+        .in("id", chamadosIds)
+
+      if (updateError) throw updateError
+
+      // 5. Registra o histórico para fins de auditoria
+      const historicos = chamadosElegiveis.map(c => ({
+        chamado_id: c.id,
+        usuario_id: user?.id,
+        status_anterior: c.status,
+        novo_status: c.status,
+        observacao: `Fechamento de equipe realizado. Pagamento e reembolso ao técnico conciliado na competência ${String(mesFechamento).padStart(2, '0')}/${anoFechamento}.`
+      }))
+
+      const { error: histError } = await supabase
+        .from("historico_chamados")
+        .insert(historicos)
+
+      if (histError) throw histError
+
+      setExibirModalNovoFechamento(false)
+      await loadPrestadorData()
+      await loadFechamentosTecnicos()
+      alert("Fechamento de técnicos realizado com sucesso!")
+    } catch (err: any) {
+      console.error(err)
+      alert(err.message || "Erro ao executar fechamento financeiro de técnicos.")
+    } finally {
+      setSalvandoFechamento(false)
+    }
+  }
+
+  // Configura a assinatura Realtime com o Supabase
   useEffect(() => {
     if (user && perfil) {
       loadPrestadorData()
+      loadFechamentosTecnicos()
 
       // Inicia a escuta em tempo real dos chamados
       const channel = supabase
@@ -2066,155 +2197,299 @@ export default function PrestadorDashboard() {
               </div>
             </div>
 
-            {/* Lista de Chamados no Financeiro */}
-            <div className="space-y-4">
-              {financeiroChamados.length === 0 ? (
-                <div className="text-center py-16 text-slate-400 bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center gap-3">
-                  <Coins className="h-10 w-10 text-slate-300" />
-                  <div className="font-semibold text-slate-500">Nenhum registro financeiro</div>
-                  <p className="max-w-xs mx-auto text-[11px] text-slate-400">
-                    Os chamados homologados aparecerão aqui para controle de custos e faturamento.
-                  </p>
-                </div>
-              ) : (
-                financeiroChamados.map((chamado) => {
-                  const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
-                  if (!orc) return null
-
-                  const matReceber = orc.responsavel_material_empresa === 'empresa' ? orc.valor_materiais_r$ : 0
-                  const recTotal = orc.valor_servico_r$ + matReceber
-
-                  const matPagar = orc.responsavel_material_tecnico === 'tecnico' ? (orc.valor_materiais_tecnico_r$ || 0) : 0
-                  const pagTotal = (orc.valor_servico_tecnico_r$ || 0) + matPagar
-
-                  const lucroItem = recTotal - pagTotal
-
-                  const dataConcl = chamado.data_conclusao || chamado.criado_em
-                  const dtReceber = calcularDataRepasse(dataConcl, chamado.imovel?.imobiliaria?.tipo_repasse, chamado.imovel?.imobiliaria?.prazo_repasse_dias)
-                  const dtPagar = calcularDataRepasse(dataConcl, perfil?.tipo_repasse, perfil?.prazo_repasse_dias)
-
-                  const strReceber = formatarData(dtReceber)
-                  const strPagar = formatarData(dtPagar)
-
-                  const condReceber = formatarCondicaoRepasse(chamado.imovel?.imobiliaria?.tipo_repasse, chamado.imovel?.imobiliaria?.prazo_repasse_dias)
-                  const condPagar = formatarCondicaoRepasse(perfil?.tipo_repasse, perfil?.prazo_repasse_dias)
-
-                  const isReceberVencido = dtReceber && dtReceber < hoje
-                  const isPagarVencido = dtPagar && dtPagar < hoje
-
-                  // Status amigável
-                  let statusColor = "bg-slate-100 text-slate-700"
-                  let statusTexto = chamado.status as string
-                  if (chamado.status === "orcamento_recebido") {
-                    statusColor = "bg-yellow-50 text-yellow-800 border-yellow-200"
-                    statusTexto = "Em Análise"
-                  } else if (chamado.status === "os_liberada" || chamado.status === "em_execucao") {
-                    statusColor = "bg-teal-50 text-teal-800 border-teal-200"
-                    statusTexto = "Em Execução"
-                  } else if (chamado.status === "servico_concluido" || chamado.status === "encerrado") {
-                    statusColor = "bg-green-50 text-green-800 border-green-200"
-                    statusTexto = "Finalizado"
-                  }
-
-                  return (
-                    <Card key={chamado.id} className="border-slate-200 shadow-sm bg-white">
-                      <CardContent className="p-4 space-y-3 text-xs">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                                {chamado.imovel?.codigo_imovel || "Sem Código"}
-                              </span>
-                              {chamado.imovel?.imobiliaria?.nome && (
-                                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold text-[9px] border border-blue-100">
-                                  {chamado.imovel.imobiliaria.nome}
-                                </span>
-                              )}
-                            </div>
-                            <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
-                          </div>
-                          <Badge className={`${statusColor} border text-[9px] font-bold uppercase`}>
-                            {statusTexto}
-                          </Badge>
-                        </div>
-
-                        <div className="text-[10px] text-slate-500 flex justify-between items-center bg-slate-50 p-2 rounded">
-                          <span>Técnico Responsável: <strong>{chamado.tecnico?.nome || "Não atribuído"}</strong></span>
-                          <span>Prazo: <strong>{orc.prazo_execucao_dias} dias</strong></span>
-                        </div>
-
-                        {/* Detalhamento Financeiro */}
-                        <div className="grid grid-cols-2 gap-3 text-[11px] pt-1">
-                          {/* Bloco Cliente */}
-                          <div className="bg-slate-50/50 p-2.5 rounded border border-slate-100 space-y-1">
-                            <span className="block font-bold text-[9px] text-slate-500 uppercase">Imobiliária (A Receber)</span>
-                            <div className="text-[10px] text-slate-600 bg-white p-1.5 rounded border border-slate-100 flex flex-col space-y-0.5 mb-1.5">
-                              <span>Acerto: <strong>{condReceber}</strong></span>
-                              <span className={isReceberVencido ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
-                                Previsão: <strong>{strReceber} {isReceberVencido && "(Vencido)"}</strong>
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Mão de Obra:</span>
-                              <span className="font-semibold">R$ {orc.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Materiais:</span>
-                              <span className="font-semibold text-slate-600">
-                                R$ {orc.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                              </span>
-                            </div>
-                            <div className="text-[9px] text-slate-400 italic">
-                              Pago por: {orc.responsavel_material_empresa === 'empresa' ? "Empresa (Nós)" : orc.responsavel_material_empresa === 'imobiliaria' ? "Imobiliária" : "Proprietário"}
-                            </div>
-                            <div className="flex justify-between border-t border-dashed pt-1 font-bold text-slate-800">
-                              <span>Total:</span>
-                              <span>R$ {recTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                            </div>
-                          </div>
-
-                          {/* Bloco Técnico */}
-                          <div className="bg-slate-50/50 p-2.5 rounded border border-slate-100 space-y-1">
-                            <span className="block font-bold text-[9px] text-slate-500 uppercase">Técnico (A Pagar)</span>
-                            <div className="text-[10px] text-slate-600 bg-white p-1.5 rounded border border-slate-100 flex flex-col space-y-0.5 mb-1.5">
-                              <span>Acerto: <strong>{condPagar}</strong></span>
-                              <span className={isPagarVencido ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
-                                Previsão: <strong>{strPagar} {isPagarVencido && "(Vencido)"}</strong>
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Mão de Obra:</span>
-                              <span className="font-semibold">R$ {(orc.valor_servico_tecnico_r$ || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Materiais:</span>
-                              <span className="font-semibold text-slate-600">
-                                R$ {(orc.valor_materiais_tecnico_r$ || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                              </span>
-                            </div>
-                            <div className="text-[9px] text-slate-400 italic">
-                              Comprado por: {orc.responsavel_material_tecnico === 'tecnico' ? "Técnico" : "Empresa (Nós)"}
-                            </div>
-                            <div className="flex justify-between border-t border-dashed pt-1 font-bold text-slate-800">
-                              <span>Total:</span>
-                              <span>R$ {pagTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Lucro Item */}
-                        <div className="flex justify-between items-center border-t border-slate-100 pt-2 text-xs">
-                          <span className="font-semibold text-slate-500">Resultado Líquido / Margem:</span>
-                          <span className={`font-extrabold ${lucroItem >= 0 ? "text-green-600" : "text-red-600"}`}>
-                            {lucroItem >= 0 ? "+" : ""} R$ {lucroItem.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })
-              )}
+            {/* Sub-navegação Financeira */}
+            <div className="flex gap-2 border-b border-slate-200 pb-1.5">
+              <button
+                type="button"
+                onClick={() => setSubAbaFinanceira("pendentes")}
+                className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all ${
+                  subAbaFinanceira === "pendentes"
+                    ? "bg-occasio-blue text-white shadow-sm"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                }`}
+              >
+                Lotes de Técnicos / Conciliação
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubAbaFinanceira("historico")}
+                className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all ${
+                  subAbaFinanceira === "historico"
+                    ? "bg-occasio-blue text-white shadow-sm"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                }`}
+              >
+                Histórico de Fechamentos Técnicos
+              </button>
             </div>
+
+            {subAbaFinanceira === "pendentes" ? (
+              <div className="space-y-4">
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    onClick={() => setExibirModalNovoFechamento(true)}
+                    className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold h-9 px-4 flex items-center gap-1.5 justify-center shadow-sm"
+                  >
+                    <Plus className="h-4 w-4" /> Realizar Fechamento de Técnicos
+                  </Button>
+                </div>
+
+                {financeiroChamados.length === 0 ? (
+                  <div className="text-center py-16 text-slate-400 bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center gap-3">
+                    <Coins className="h-10 w-10 text-slate-300" />
+                    <div className="font-semibold text-slate-500">Nenhum registro financeiro</div>
+                    <p className="max-w-xs mx-auto text-[11px] text-slate-400">
+                      Os chamados homologados aparecerão aqui para controle de custos e faturamento.
+                    </p>
+                  </div>
+                ) : (
+                  financeiroChamados.map((chamado) => {
+                    const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+                    if (!orc) return null
+
+                    const matReceber = orc.responsavel_material_empresa === 'empresa' ? orc.valor_materiais_r$ : 0
+                    const recTotal = orc.valor_servico_r$ + matReceber
+
+                    const matPagar = orc.responsavel_material_tecnico === 'tecnico' ? (orc.valor_materiais_tecnico_r$ || 0) : 0
+                    const pagTotal = (orc.valor_servico_tecnico_r$ || 0) + matPagar
+
+                    const lucroItem = recTotal - pagTotal
+
+                    const dataConcl = chamado.data_conclusao || chamado.criado_em
+                    const dtReceber = calcularDataRepasse(dataConcl, chamado.imovel?.imobiliaria?.tipo_repasse, chamado.imovel?.imobiliaria?.prazo_repasse_dias)
+                    const dtPagar = calcularDataRepasse(dataConcl, perfil?.tipo_repasse, perfil?.prazo_repasse_dias)
+
+                    const strReceber = formatarData(dtReceber)
+                    const strPagar = formatarData(dtPagar)
+
+                    const condReceber = formatarCondicaoRepasse(chamado.imovel?.imobiliaria?.tipo_repasse, chamado.imovel?.imobiliaria?.prazo_repasse_dias)
+                    const condPagar = formatarCondicaoRepasse(perfil?.tipo_repasse, perfil?.prazo_repasse_dias)
+
+                    const isReceberVencido = dtReceber && dtReceber < hoje
+                    const isPagarVencido = dtPagar && dtPagar < hoje
+
+                    const isPagoTecnico = chamado.status_financeiro_tecnico === "pago"
+                    const isFechadoTecnico = !!chamado.fechamento_tecnico_id
+
+                    // Status amigável
+                    let statusColor = "bg-slate-100 text-slate-700"
+                    let statusTexto = chamado.status as string
+                    if (chamado.status === "orcamento_recebido") {
+                      statusColor = "bg-yellow-50 text-yellow-800 border-yellow-200"
+                      statusTexto = "Em Análise"
+                    } else if (chamado.status === "os_liberada" || chamado.status === "em_execucao") {
+                      statusColor = "bg-teal-50 text-teal-800 border-teal-200"
+                      statusTexto = "Em Execução"
+                    } else if (chamado.status === "servico_concluido" || chamado.status === "encerrado") {
+                      statusColor = "bg-green-50 text-green-800 border-green-200"
+                      statusTexto = "Finalizado"
+                    }
+
+                    return (
+                      <Card key={chamado.id} className="border-slate-200 shadow-sm bg-white">
+                        <CardContent className="p-4 space-y-3 text-xs">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                                  {chamado.imovel?.codigo_imovel || "Sem Código"}
+                                </span>
+                                {chamado.imovel?.imobiliaria?.nome && (
+                                  <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold text-[9px] border border-blue-100">
+                                    {chamado.imovel.imobiliaria.nome}
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
+                            </div>
+                            <Badge className={`${statusColor} border text-[9px] font-bold uppercase`}>
+                              {statusTexto}
+                            </Badge>
+                          </div>
+
+                          <div className="text-[10px] text-slate-500 flex justify-between items-center bg-slate-50 p-2 rounded">
+                            <span>Técnico Responsável: <strong>{chamado.tecnico?.nome || "Não atribuído"}</strong></span>
+                            <span>Prazo: <strong>{orc.prazo_execucao_dias} dias</strong></span>
+                          </div>
+
+                          {/* Detalhamento Financeiro */}
+                          <div className="grid grid-cols-2 gap-3 text-[11px] pt-1">
+                            {/* Bloco Cliente */}
+                            <div className="bg-slate-50/50 p-2.5 rounded border border-slate-100 space-y-1">
+                              <span className="block font-bold text-[9px] text-slate-500 uppercase">Imobiliária (A Receber)</span>
+                              <div className="text-[10px] text-slate-600 bg-white p-1.5 rounded border border-slate-100 flex flex-col space-y-0.5 mb-1.5">
+                                <span>Acerto: <strong>{condReceber}</strong></span>
+                                <span className={isReceberVencido ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
+                                  Previsão: <strong>{strReceber} {isReceberVencido && "(Vencido)"}</strong>
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Mão de Obra:</span>
+                                <span className="font-semibold">R$ {orc.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Materiais:</span>
+                                <span className="font-semibold text-slate-600">
+                                  R$ {orc.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                              <div className="text-[9px] text-slate-400 italic">
+                                Pago por: {orc.responsavel_material_empresa === 'empresa' ? "Empresa (Nós)" : orc.responsavel_material_empresa === 'imobiliaria' ? "Imobiliária" : "Proprietário"}
+                              </div>
+                              <div className="flex justify-between border-t border-dashed pt-1 font-bold text-slate-800">
+                                <span>Total:</span>
+                                <span>R$ {recTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            </div>
+
+                            {/* Bloco Técnico */}
+                            <div className="bg-slate-50/50 p-2.5 rounded border border-slate-100 space-y-1">
+                              <span className="block font-bold text-[9px] text-slate-500 uppercase">Técnico (A Pagar)</span>
+                              <div className="text-[10px] text-slate-600 bg-white p-1.5 rounded border border-slate-100 flex flex-col space-y-0.5 mb-1.5">
+                                <span>Acerto: <strong>{condPagar}</strong></span>
+                                <span className={isPagarVencido ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
+                                  Previsão: <strong>{strPagar} {isPagarVencido && "(Vencido)"}</strong>
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Mão de Obra:</span>
+                                <span className="font-semibold">R$ {(orc.valor_servico_tecnico_r$ || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Materiais:</span>
+                                <span className="font-semibold text-slate-600">
+                                  R$ {(orc.valor_materiais_tecnico_r$ || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                              <div className="text-[9px] text-slate-400 italic">
+                                Comprado por: {orc.responsavel_material_tecnico === 'tecnico' ? "Técnico" : "Empresa (Nós)"}
+                              </div>
+                              <div className="flex justify-between border-t border-dashed pt-1 font-bold text-slate-800">
+                                <span>Total:</span>
+                                <span>R$ {pagTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Lucro Item */}
+                          <div className="flex justify-between items-center border-t border-slate-100 pt-2 text-xs">
+                            <span className="font-semibold text-slate-500">Resultado Líquido / Margem:</span>
+                            <span className={`font-extrabold ${lucroItem >= 0 ? "text-green-600" : "text-red-600"}`}>
+                              {lucroItem >= 0 ? "+" : ""} R$ {lucroItem.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+
+                          {/* Status de Pagamento ao Técnico */}
+                          <div className="flex justify-between items-center border-t border-slate-100 pt-2 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-500 font-semibold">Pagamento Técnico:</span>
+                              <Badge className={`border text-[9px] font-extrabold uppercase ${
+                                isPagoTecnico
+                                  ? "bg-green-50 text-green-700 border-green-200" 
+                                  : "bg-yellow-50 text-yellow-700 border-yellow-200"
+                              }`}>
+                                {isPagoTecnico ? "Pago" : "Pendente"}
+                              </Badge>
+                            </div>
+                            
+                            <Button
+                              size="sm"
+                              disabled={salvando || isFechadoTecnico}
+                              onClick={async () => {
+                                setSalvando(true)
+                                try {
+                                  const novoStatusFin = isPagoTecnico ? "pendente" : "pago"
+                                  const { error } = await supabase
+                                    .from("chamados")
+                                    .update({ status_financeiro_tecnico: novoStatusFin })
+                                    .eq("id", chamado.id)
+                                  if (error) throw error
+                                  await loadPrestadorData()
+                                } catch (err: any) {
+                                  console.error(err)
+                                  alert(err.message || "Erro ao atualizar pagamento do técnico.")
+                                } finally {
+                                  setSalvando(false)
+                                }
+                              }}
+                              className={`h-6 text-[9px] px-2 font-semibold text-white ${
+                                isFechadoTecnico 
+                                  ? "bg-slate-300 border-slate-300 text-slate-500 cursor-not-allowed" 
+                                  : (isPagoTecnico ? "bg-amber-500 hover:bg-amber-600" : "bg-green-600 hover:bg-green-700")
+                              }`}
+                            >
+                              {isFechadoTecnico ? "Fechado" : (isPagoTecnico ? "Pendente" : "Pagar")}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })
+                )}
+              </div>
+            ) : (
+              /* Histórico de Fechamentos Técnicos */
+              <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        <th className="py-3 px-4">Competência</th>
+                        <th className="py-3 px-4">Data do Fechamento</th>
+                        <th className="py-3 px-4">Operador</th>
+                        <th className="py-3 px-4 text-right">Total Pago</th>
+                        <th className="py-3 px-4 text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {carregandoFechamentos ? (
+                        <tr>
+                          <td colSpan={5} className="text-center py-10 text-slate-400">
+                            Carregando histórico...
+                          </td>
+                        </tr>
+                      ) : fechamentosTecnicos.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="text-center py-10 text-slate-400">
+                            Nenhum fechamento registrado ainda.
+                          </td>
+                        </tr>
+                      ) : (
+                        fechamentosTecnicos.map((f) => (
+                          <tr key={f.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="py-3.5 px-4 font-bold text-occasio-navy">
+                              {String(f.mes).padStart(2, '0')}/{f.ano}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600">
+                              {new Date(f.criado_em).toLocaleDateString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600">
+                              {f.criado_por?.nome || "Sistema"}
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-semibold text-slate-700">
+                              R$ {Number(f.total_pago_tecnicos).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setFechamentoSelecionado(f)
+                                  setExibirModalDetalhesFechamento(true)
+                                }}
+                                className="h-7 text-[10px] px-2.5 font-bold bg-occasio-blue hover:bg-occasio-navy text-white"
+                              >
+                                <FileText className="h-3.5 w-3.5 mr-1" /> Detalhes / Extrato
+                              </Button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
           </div>
         )
       })()}
@@ -2393,6 +2668,253 @@ export default function PrestadorDashboard() {
                 })
               )}
             </div>
+          </div>
+        )
+      })()}
+
+      {/* Modal de Novo Fechamento de Técnicos */}
+      {exibirModalNovoFechamento && (() => {
+        const chamadosCompetencia = financeiroChamados.filter(c => {
+          if (c.status !== 'servico_concluido' && c.status !== 'encerrado') return false
+          if (!c.tecnico_id) return false
+          if (c.fechamento_tecnico_id) return false
+          
+          const dataRef = c.data_conclusao ? new Date(c.data_conclusao) : new Date(c.criado_em)
+          return dataRef.getMonth() + 1 === mesFechamento && dataRef.getFullYear() === anoFechamento
+        })
+
+        let prevMaoDeObra = 0
+        let prevReembolso = 0
+        chamadosCompetencia.forEach(c => {
+          const orc = c.orcamentos?.find(o => o.homologado_pela_empresa)
+          if (!orc) return
+          prevMaoDeObra += Number(orc.valor_servico_tecnico_r$ || 0)
+          if (orc.responsavel_material_tecnico === 'tecnico') {
+            prevReembolso += Number(orc.valor_materiais_tecnico_r$ || 0)
+          }
+        })
+
+        const totalPrevisto = prevMaoDeObra + prevReembolso
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <Card className="w-full max-w-md border-slate-200 shadow-2xl bg-white animate-in zoom-in-95 duration-150">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
+                <CardTitle className="text-sm font-extrabold text-occasio-navy flex items-center gap-1.5 justify-between">
+                  <span>Realizar Fechamento de Técnicos</span>
+                  <button onClick={() => setExibirModalNovoFechamento(false)} className="text-slate-400 hover:text-slate-600 text-xs">
+                    ✕
+                  </button>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Faturamento e repasse mensal consolidado da equipe de técnicos de campo.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Mês *</label>
+                    <select
+                      value={mesFechamento}
+                      onChange={(e) => setMesFechamento(Number(e.target.value))}
+                      className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                        <option key={m} value={m}>{String(m).padStart(2, '0')} - {new Date(2000, m - 1).toLocaleString('pt-BR', { month: 'long' })}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Ano *</label>
+                    <select
+                      value={anoFechamento}
+                      onChange={(e) => setAnoFechamento(Number(e.target.value))}
+                      className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs"
+                    >
+                      {[2025, 2026, 2027].map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded border border-slate-100 space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">OS's da Equipe:</span>
+                    <strong className="text-slate-700">{chamadosCompetencia.length}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Total Mão de Obra:</span>
+                    <strong className="text-slate-700 font-mono">R$ {prevMaoDeObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Total Reembolsos:</span>
+                    <strong className="text-green-600 font-mono">R$ {prevReembolso.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                  </div>
+                  <div className="flex justify-between border-t pt-1.5 font-bold">
+                    <span className="text-slate-700">Total Líquido Devido:</span>
+                    <span className="text-occasio-blue font-mono">
+                      R$ {totalPrevisto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                {chamadosCompetencia.length > 0 ? (
+                  <div className="max-h-32 overflow-y-auto border border-slate-100 rounded p-2 bg-white text-[10px] space-y-1.5">
+                    {chamadosCompetencia.map(c => {
+                      const orc = c.orcamentos?.find(o => o.homologado_pela_empresa)
+                      const valTec = Number(orc?.valor_servico_tecnico_r$ || 0) + (orc?.responsavel_material_tecnico === 'tecnico' ? Number(orc?.valor_materiais_tecnico_r$ || 0) : 0)
+                      return (
+                        <div key={c.id} className="flex justify-between text-slate-500 border-b pb-1 last:border-0 last:pb-0">
+                          <span className="truncate max-w-[200px]" title={c.titulo}>
+                            [{c.imovel?.codigo_imovel}] {c.tecnico?.nome}: {c.titulo}
+                          </span>
+                          <span className="font-semibold text-slate-700 font-mono">
+                            R$ {valTec.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-red-500 font-medium text-center">
+                    Nenhuma OS finalizada encontrada para esta competência.
+                  </p>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    disabled={salvandoFechamento || chamadosCompetencia.length === 0}
+                    onClick={handleExecutarFechamentoTecnicos}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold"
+                  >
+                    {salvandoFechamento ? "Processando..." : "Confirmar Fechamento"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setExibirModalNovoFechamento(false)}
+                    className="flex-1 border-slate-200 text-xs text-slate-600 hover:bg-slate-50 bg-white"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )
+      })()}
+
+      {/* Modal de Detalhes do Fechamento de Técnicos */}
+      {exibirModalDetalhesFechamento && fechamentoSelecionado && (() => {
+        const f = fechamentoSelecionado
+        const chamadosFechados = financeiroChamados.filter(c => c.fechamento_tecnico_id === f.id)
+
+        // Agrupa valores por Técnico
+        const tecnicosMap: { 
+          [id: string]: { 
+            nome: string
+            maoDeObra: number
+            reembolso: number
+            total: number
+          } 
+        } = {}
+
+        chamadosFechados.forEach(c => {
+          if (!c.tecnico_id) return
+          const orc = c.orcamentos?.find(o => o.homologado_pela_empresa)
+          if (!orc) return
+
+          const idTec = c.tecnico_id
+          const nomeTec = c.tecnico?.nome || "Sem Nome"
+          const maoDeObra = Number(orc.valor_servico_tecnico_r$ || 0)
+          const reembolso = orc.responsavel_material_tecnico === 'tecnico' ? Number(orc.valor_materiais_tecnico_r$ || 0) : 0
+
+          if (!tecnicosMap[idTec]) {
+            tecnicosMap[idTec] = {
+              nome: nomeTec,
+              maoDeObra: 0,
+              reembolso: 0,
+              total: 0
+            }
+          }
+
+          tecnicosMap[idTec].maoDeObra += maoDeObra
+          tecnicosMap[idTec].reembolso += reembolso
+          tecnicosMap[idTec].total += maoDeObra + reembolso
+        })
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <Card className="w-full max-w-lg border-slate-200 shadow-2xl bg-white animate-in zoom-in-95 duration-150 max-h-[85vh] flex flex-col">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4 flex-shrink-0">
+                <CardTitle className="text-sm font-extrabold text-occasio-navy flex items-center gap-1.5 justify-between">
+                  <span>Fechamento Competência: {String(f.mes).padStart(2, '0')}/{f.ano}</span>
+                  <button onClick={() => setExibirModalDetalhesFechamento(false)} className="text-slate-400 hover:text-slate-600 text-xs">
+                    ✕
+                  </button>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Detalhamento consolidado de repasses para técnicos fechados em {new Date(f.criado_em).toLocaleDateString('pt-BR')} por {f.criado_por?.nome || "Sistema"}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-4 overflow-y-auto flex-grow text-xs">
+                {/* Resumo */}
+                <div className="bg-slate-50 p-3 rounded border border-slate-200/60 flex justify-between items-center text-center">
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-500 uppercase">OS's Vinculadas</span>
+                    <strong className="text-base text-slate-800">{chamadosFechados.length}</strong>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-500 uppercase">Repasse Total Técnicos</span>
+                    <strong className="text-base text-occasio-blue font-mono font-bold">R$ {Number(f.total_pago_tecnicos).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                  </div>
+                </div>
+
+                {/* Técnicos e Extratos */}
+                <div className="space-y-3">
+                  <h4 className="font-extrabold text-slate-700 uppercase tracking-wider border-b pb-1 text-[10px]">
+                    👥 Repasses por Técnico
+                  </h4>
+                  {Object.keys(tecnicosMap).length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic">Nenhum técnico com valores a receber neste lote.</p>
+                  ) : (
+                    <div className="space-y-3 divide-y divide-slate-100 max-h-60 overflow-y-auto">
+                      {Object.entries(tecnicosMap).map(([idTec, data]) => (
+                        <div key={idTec} className="pt-2 flex flex-col space-y-1">
+                          <div className="flex justify-between items-center font-bold text-slate-800">
+                            <span>{data.nome}</span>
+                            <span className="font-mono font-bold">R$ {data.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-slate-500">
+                            <span>Mão de Obra: R$ {data.maoDeObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            <span>Reembolsos: R$ {data.reembolso.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-end pt-1">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                window.open(`/financeiro/recibo-tecnico/${f.id}/${idTec}`, '_blank')
+                              }}
+                              className="h-6 text-[9px] font-bold bg-occasio-blue hover:bg-occasio-navy text-white flex items-center gap-1"
+                            >
+                              <Printer className="h-3 w-3" /> Gerar Recibo / PDF
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+              <div className="border-t border-slate-100 bg-slate-50/50 p-4 flex gap-2 flex-shrink-0">
+                <Button
+                  onClick={() => setExibirModalDetalhesFechamento(false)}
+                  className="w-full bg-occasio-blue hover:bg-occasio-navy text-white text-xs font-bold"
+                >
+                  Fechar Extrato
+                </Button>
+              </div>
+            </Card>
           </div>
         )
       })()}

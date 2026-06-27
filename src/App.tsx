@@ -17,6 +17,7 @@ import ProprietarioDashboard from "./pages/proprietario/Dashboard"
 import AdminDashboard from "./pages/admin/Dashboard"
 import PrestadorEquipe from "./pages/prestador/Equipe"
 import ChamadoPrint from "./pages/ChamadoPrint"
+import ReciboTecnicoPrint from "./pages/ReciboTecnicoPrint"
 
 // Componente auxiliar para tratar rolagem suave de âncoras (hash)
 // e garantir que a página role para o topo ao alternar de rota
@@ -69,7 +70,7 @@ function MainLayout() {
   const navigate = useNavigate()
   const isHome = location.pathname === "/"
   const isLogin = location.pathname === "/login" || location.pathname === "/login-teste"
-  const isPrintPage = location.pathname.startsWith("/chamado/print/")
+  const isPrintPage = location.pathname.startsWith("/chamado/print/") || location.pathname.startsWith("/financeiro/recibo-tecnico/")
   const { user, perfil, signOut } = useAuth()
 
   // Ação de clique na logo (rola para o topo se já estiver na home, senão vai para a home)
@@ -87,6 +88,7 @@ function MainLayout() {
         <main className="flex-grow">
           <Routes>
             <Route path="/chamado/print/:id" element={<ChamadoPrint />} />
+            <Route path="/financeiro/recibo-tecnico/:fechamento_id/:tecnico_id" element={<ReciboTecnicoPrint />} />
           </Routes>
         </main>
       </div>

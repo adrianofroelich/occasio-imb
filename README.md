@@ -106,6 +106,18 @@ A conciliação definitiva de saldos e fechamento de competência de ordens de s
 
 ---
 
+## 📅 Fechamento de Técnicos e Recibos de Pagamento (Prestador PJ)
+
+A prestadora PJ possui uma rotina específica no seu painel financeiro para faturar e acertar as contas com sua equipe de técnicos de campo:
+
+1. **Sub-Abas de Navegação:** Alternância no painel de controle financeiro do prestador entre "Lotes de Técnicos / Conciliação" (gerenciamento individual) e "Histórico de Fechamentos Técnicos".
+2. **Pagamento Persistente ao Técnico:** O botão "Pagar" na listagem de acertos PJ atualiza de forma permanente no banco de dados o campo `status_financeiro_tecnico` (`pago` / `pendente`). Fica desabilitado com o rótulo *"Fechado"* se o chamado já pertencer a um lote homologado.
+3. **Novo Fechamento de Técnicos:** Seleção da competência (Mês/Ano) que gera um preview reativo contendo o consolidado de serviços e reembolsos de materiais devidos aos profissionais, associando os chamados ao novo fechamento de técnicos.
+4. **Relatório e Geração de Recibos Profissionais:** A visualização de um fechamento detalha o repasse devido por profissional de campo. Um botão **"Gerar Recibo / PDF"** abre a rota de impressão `/financeiro/recibo-tecnico/:fechamento_id/:tecnico_id`.
+5. **Layout de Recibo Imprimível (`/financeiro/recibo-tecnico/`):** Apresenta o recibo formal brasileiro com o cabeçalho completo da Prestadora PJ, os dados do Técnico, a discriminação por extenso do valor faturado, a lista detalhada de OS's trabalhadas e o local para data e assinatura. Otimizado para impressão direta ou salvamento em PDF.
+
+---
+
 ## 📁 Estrutura de Pastas (Mapa do Projeto)
 
 ```bash
