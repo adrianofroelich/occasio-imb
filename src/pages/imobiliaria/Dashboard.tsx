@@ -1384,53 +1384,6 @@ export default function Dashboard() {
                           {RESP_CONFIG[chamadoAtivo.responsabilidade]?.label}
                         </Badge>
                       </div>
-                      
-                      <div className="flex gap-2">
-                        <select
-                          value={novaResponsabilidade}
-                          onChange={(e) => setNovaResponsabilidade(e.target.value as Responsabilidade)}
-                          className="flex-1 border border-slate-200 rounded-md h-8 px-2 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
-                        >
-                          <option value="indefinido">Indefinido (Em Análise)</option>
-                          <option value="proprietario">Proprietário (Depreciação Estrutural)</option>
-                          <option value="inquilino">Inquilino (Uso Inadequado/Mau Uso)</option>
-                        </select>
-                        <Button
-                          type="button"
-                          disabled={salvandoAcao}
-                          onClick={async () => {
-                            if (!novaResponsabilidade) return
-                            setSalvandoAcao(true)
-                            setErro(null)
-                            try {
-                              const { error } = await supabase
-                                .from("chamados")
-                                .update({ responsabilidade: novaResponsabilidade })
-                                .eq("id", chamadoAtivo.id)
-                              if (error) throw error
-                              
-                              await supabase.from("historico_chamados").insert({
-                                chamado_id: chamadoAtivo.id,
-                                usuario_id: user?.id,
-                                status_anterior: chamadoAtivo.status,
-                                novo_status: chamadoAtivo.status,
-                                observacao: `Responsabilidade financeira alterada para ${RESP_CONFIG[novaResponsabilidade]?.label} por ${perfil?.nome}.`
-                              })
-
-                              await loadChamados()
-                              setChamadoAtivo(prev => prev ? { ...prev, responsabilidade: novaResponsabilidade } : null)
-                            } catch (err: any) {
-                              console.error(err)
-                              setErro(err.message || "Erro ao atualizar responsabilidade.")
-                            } finally {
-                              setSalvandoAcao(false)
-                            }
-                          }}
-                          className="bg-occasio-blue hover:bg-occasio-navy text-white text-xs h-8 px-3 font-semibold shadow-sm"
-                        >
-                          {salvandoAcao ? "Salvando..." : "Alterar"}
-                        </Button>
-                      </div>
                     </div>
 
                     <Button
