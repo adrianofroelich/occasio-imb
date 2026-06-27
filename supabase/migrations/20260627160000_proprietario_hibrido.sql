@@ -205,7 +205,7 @@ BEGIN
           jsonb_build_object(
             'id', h.id,
             'status_anterior', h.status_anterior,
-            'status_novo', h.status_novo,
+            'status_novo', h.novo_status,
             'observacao', h.observacao,
             'criado_em', h.criado_em,
             'criado_por_nome', p_hist.nome
