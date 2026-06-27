@@ -82,6 +82,8 @@ interface Chamado {
       nome: string
     } | null
   }[]
+  status_financeiro?: 'pendente' | 'pago' | null
+  fechamento_id?: string | null
 }
 
 // Configurações visuais dos badges de status
@@ -196,8 +198,17 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<"chamados" | "financeiro">("chamados")
   const [filtroFinanceiroStatus, setFiltroFinanceiroStatus] = useState<"todos" | "pendente" | "pago">("todos")
   const [filtroFinanceiroPrestador, setFiltroFinanceiroPrestador] = useState<string>("todos")
+  // Estados para Fechamento Financeiro Mensal e Conciliação Definitiva
   const [extratoProprietarioAtivo, setExtratoProprietarioAtivo] = useState<Chamado | null>(null)
-  const [chamadosPagos, setChamadosPagos] = useState<string[]>([])
+  const [subAbaFinanceira, setSubAbaFinanceira] = useState<"pendentes" | "historico">("pendentes")
+  const [fechamentos, setFechamentos] = useState<any[]>([])
+  const [carregandoFechamentos, setCarregandoFechamentos] = useState(false)
+  const [fechamentoSelecionado, setFechamentoSelecionado] = useState<any | null>(null)
+  const [exibirModalNovoFechamento, setExibirModalNovoFechamento] = useState(false)
+  const [exibirModalDetalhesFechamento, setExibirModalDetalhesFechamento] = useState(false)
+  const [mesFechamento, setMesFechamento] = useState<number>(new Date().getMonth() + 1)
+  const [anoFechamento, setAnoFechamento] = useState<number>(new Date().getFullYear())
+  const [salvandoFechamento, setSalvandoFechamento] = useState(false)
 
   // Estados para abertura de chamado pela imobiliária
   const [formChamadoAberto, setFormChamadoAberto] = useState(false)
@@ -539,10 +550,135 @@ export default function Dashboard() {
     }
   }
 
+  // Carrega a lista de fechamentos mensais persistidos
+  const loadFechamentos = async () => {
+    setCarregandoFechamentos(true)
+    try {
+      const { data, error } = await supabase
+        .from("fechamentos_mensais")
+        .select(`
+          *,
+          criado_por:criado_por ( nome )
+        `)
+        .order("ano", { ascending: false })
+        .order("mes", { ascending: false })
+
+      if (error) throw error
+      setFechamentos(data || [])
+    } catch (err: any) {
+      console.error("Erro ao carregar fechamentos:", err)
+    } finally {
+      setCarregandoFechamentos(false)
+    }
+  }
+
+  // Realiza o fechamento mensal da competência selecionada
+  const handleExecutarFechamento = async () => {
+    setSalvandoFechamento(true)
+    setErro(null)
+
+    // 1. Filtra chamados elegíveis
+    const chamadosElegiveis = chamados.filter(c => {
+      if (c.status !== 'servico_concluido' && c.status !== 'encerrado') return false
+      const orc = c.orcamentos && c.orcamentos.find(o => o.homologado_pela_empresa)
+      if (!orc) return false
+      if (c.fechamento_id) return false // Já fechado
+      
+      const dataRef = c.data_conclusao ? new Date(c.data_conclusao) : new Date(c.criado_em)
+      return dataRef.getMonth() + 1 === mesFechamento && dataRef.getFullYear() === anoFechamento
+    })
+
+    if (chamadosElegiveis.length === 0) {
+      alert("Nenhum chamado elegível encontrado para esta competência (Mês/Ano).")
+      setSalvandoFechamento(false)
+      return
+    }
+
+    // 2. Calcula os totais
+    let totalReceber = 0
+    let totalPagar = 0
+
+    chamadosElegiveis.forEach(c => {
+      const orc = c.orcamentos?.find(o => o.homologado_pela_empresa)
+      if (!orc) return
+
+      // Proprietário
+      if (orc.responsavel_material_empresa === 'proprietario') {
+        totalReceber += Number(orc.valor_servico_r$) + Number(orc.valor_materiais_r$)
+      } else if (c.responsabilidade === 'proprietario') {
+        totalReceber += Number(orc.valor_servico_r$)
+      }
+
+      // Prestador
+      const matPagar = orc.responsavel_material_empresa === 'empresa' ? Number(orc.valor_materiais_r$) : 0
+      totalPagar += Number(orc.valor_servico_r$) + matPagar
+    })
+
+    try {
+      // 3. Insere a competência fechada na tabela fechamentos_mensais
+      const { data: novoFechamento, error: insertError } = await supabase
+        .from("fechamentos_mensais")
+        .insert({
+          mes: mesFechamento,
+          ano: anoFechamento,
+          total_receber_proprietarios: totalReceber,
+          total_pagar_prestadores: totalPagar,
+          criado_por: user?.id
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        if (insertError.code === '23505') {
+          throw new Error(`A competência ${String(mesFechamento).padStart(2, '0')}/${anoFechamento} já foi fechada anteriormente!`)
+        }
+        throw insertError
+      }
+
+      // 4. Associa os chamados a esse fechamento e os marca como pagos
+      const chamadosIds = chamadosElegiveis.map(c => c.id)
+      const { error: updateError } = await supabase
+        .from("chamados")
+        .update({
+          fechamento_id: novoFechamento.id,
+          status_financeiro: 'pago'
+        })
+        .in("id", chamadosIds)
+
+      if (updateError) throw updateError
+
+      // 5. Registra cada um no histórico de chamados para auditoria
+      const historicos = chamadosElegiveis.map(c => ({
+        chamado_id: c.id,
+        usuario_id: user?.id,
+        status_anterior: c.status,
+        novo_status: c.status,
+        observacao: `Chamado conciliado no Fechamento Mensal definitivo da competência ${String(mesFechamento).padStart(2, '0')}/${anoFechamento}.`
+      }))
+
+      const { error: histError } = await supabase
+        .from("historico_chamados")
+        .insert(historicos)
+
+      if (histError) throw histError
+
+      setExibirModalNovoFechamento(false)
+      await loadChamados()
+      await loadFechamentos()
+      alert("Fechamento mensal realizado com sucesso!")
+    } catch (err: any) {
+      console.error(err)
+      alert(err.message || "Erro ao executar fechamento financeiro.")
+    } finally {
+      setSalvandoFechamento(false)
+    }
+  }
+
   // Configura a assinatura Realtime com o Supabase
   useEffect(() => {
     if (user && perfil) {
       loadChamados()
+      loadFechamentos()
 
       // Assina alterações em tempo real na tabela chamados
       const channel = supabase
@@ -835,7 +971,7 @@ export default function Dashboard() {
     setSalvandoAcao(true)
     setErro(null)
 
-    if (chamadosPagos.includes(chamadoAtivo.id)) {
+    if (chamadoAtivo.status_financeiro === "pago") {
       setErro("Não é possível desfazer o encerramento de um chamado que já foi pago/conciliado.")
       setSalvandoAcao(false)
       return
@@ -1608,12 +1744,12 @@ export default function Dashboard() {
 
                     <Button
                       type="button"
-                      disabled={salvandoAcao || chamadosPagos.includes(chamadoAtivo.id)}
+                      disabled={salvandoAcao || chamadoAtivo.status_financeiro === "pago"}
                       variant="outline"
                       onClick={handleDesfazerEncerramento}
                       className="w-full border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 text-[11px] font-bold h-9 flex items-center gap-1.5 justify-center shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200"
                     >
-                      {salvandoAcao ? "Reabrindo..." : (chamadosPagos.includes(chamadoAtivo.id) ? "Bloqueado: OS Paga" : "Desfazer Encerramento")}
+                      {salvandoAcao ? "Reabrindo..." : (chamadoAtivo.status_financeiro === "pago" ? "Bloqueado: OS Paga" : "Desfazer Encerramento")}
                     </Button>
                   </div>
                 ) : (
@@ -1837,7 +1973,7 @@ export default function Dashboard() {
           const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
           if (!orc) return false
 
-          const inPago = chamadosPagos.includes(chamado.id)
+          const inPago = chamado.status_financeiro === "pago"
           const atendeStatus = 
             filtroFinanceiroStatus === "todos" ||
             (filtroFinanceiroStatus === "pago" && inPago) ||
@@ -1908,160 +2044,277 @@ export default function Dashboard() {
               </Card>
             </div>
 
-            {/* Filtros Financeiros */}
-            <Card className="border-slate-200 shadow-sm bg-slate-50/50">
-              <CardContent className="py-4 flex flex-wrap gap-4 items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-slate-500" />
-                  <span className="text-xs font-semibold text-slate-700">Filtrar Lotes de Acerto:</span>
-                </div>
-                
-                <div className="flex flex-wrap gap-4 items-center flex-grow justify-end">
-                  <div>
-                    <select
-                      value={filtroFinanceiroStatus}
-                      onChange={(e) => setFiltroFinanceiroStatus(e.target.value as any)}
-                      className="border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
-                    >
-                      <option value="todos">Todos os Status</option>
-                      <option value="pendente">Pendentes (Não Pagos)</option>
-                      <option value="pago">Conciliados (Pagos)</option>
-                    </select>
-                  </div>
+            {/* Sub-navegação Financeira */}
+            <div className="flex gap-2 border-b border-slate-200 pb-1.5">
+              <button
+                type="button"
+                onClick={() => setSubAbaFinanceira("pendentes")}
+                className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all ${
+                  subAbaFinanceira === "pendentes"
+                    ? "bg-occasio-blue text-white shadow-sm"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                }`}
+              >
+                Lotes de Acerto / Conciliação
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubAbaFinanceira("historico")}
+                className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all ${
+                  subAbaFinanceira === "historico"
+                    ? "bg-occasio-blue text-white shadow-sm"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                }`}
+              >
+                Histórico de Fechamentos Mensais
+              </button>
+            </div>
 
-                  <div>
-                    <select
-                      value={filtroFinanceiroPrestador}
-                      onChange={(e) => setFiltroFinanceiroPrestador(e.target.value)}
-                      className="border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
-                    >
-                      <option value="todos">Todas as Prestadoras</option>
-                      {prestadorasUnicas.map(p => (
-                        <option key={p.id} value={p.id}>{p.nome}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {subAbaFinanceira === "pendentes" ? (
+              <>
+                {/* Filtros Financeiros */}
+                <Card className="border-slate-200 shadow-sm bg-slate-50/50">
+                  <CardContent className="py-4 flex flex-wrap gap-4 items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Filter className="h-4 w-4 text-slate-500" />
+                      <span className="text-xs font-semibold text-slate-700">Filtrar Lotes de Acerto:</span>
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-4 items-center flex-grow justify-end">
+                      <div>
+                        <select
+                          value={filtroFinanceiroStatus}
+                          onChange={(e) => setFiltroFinanceiroStatus(e.target.value as any)}
+                          className="border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                        >
+                          <option value="todos">Todos os Status</option>
+                          <option value="pendente">Pendentes (Não Pagos)</option>
+                          <option value="pago">Conciliados (Pagos)</option>
+                        </select>
+                      </div>
 
-            {/* Tabela de Conciliação */}
-            <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      <th className="py-3 px-4">Imóvel/OS</th>
-                      <th className="py-3 px-4">Proprietário (Devedor)</th>
-                      <th className="py-3 px-4">Prestadora PJ (Credor)</th>
-                      <th className="py-3 px-4">Regra / Previsão</th>
-                      <th className="py-3 px-4 text-right">A Receber (Prop)</th>
-                      <th className="py-3 px-4 text-right">A Pagar (PJ)</th>
-                      <th className="py-3 px-4 text-center">Status</th>
-                      <th className="py-3 px-4 text-center">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {chamadosConciliacaoFiltrados.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="text-center py-10 text-slate-400">
-                          Nenhum chamado conciliável encontrado.
-                        </td>
-                      </tr>
-                    ) : (
-                      chamadosConciliacaoFiltrados.map((chamado) => {
-                        const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
-                        if (!orc) return null
+                      <div>
+                        <select
+                          value={filtroFinanceiroPrestador}
+                          onChange={(e) => setFiltroFinanceiroPrestador(e.target.value)}
+                          className="border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                        >
+                          <option value="todos">Todas as Prestadoras</option>
+                          {prestadorasUnicas.map(p => (
+                            <option key={p.id} value={p.id}>{p.nome}</option>
+                          ))}
+                        </select>
+                      </div>
 
-                        const isPago = chamadosPagos.includes(chamado.id)
+                      <Button
+                        type="button"
+                        onClick={() => setExibirModalNovoFechamento(true)}
+                        className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold h-9 px-4 flex items-center gap-1.5 justify-center shadow-sm"
+                      >
+                        <Plus className="h-4 w-4" /> Novo Fechamento Mensal
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
 
-                        // Valores
-                        const valReceber = orc.responsavel_material_empresa === 'proprietario' 
-                          ? orc.valor_servico_r$ + orc.valor_materiais_r$ 
-                          : (chamado.responsabilidade === 'proprietario' ? orc.valor_servico_r$ : 0)
-
-                        const valPagar = orc.valor_servico_r$ + (orc.responsavel_material_empresa === 'empresa' ? orc.valor_materiais_r$ : 0)
-
-                        // Prazos
-                        const dataConcl = chamado.data_conclusao || chamado.criado_em
-                        const dtRepasse = calcularDataRepasse(dataConcl, chamado.empresa_prestadora?.tipo_repasse, chamado.empresa_prestadora?.prazo_repasse_dias)
-                        const condRepasse = formatarCondicaoRepasse(chamado.empresa_prestadora?.tipo_repasse, chamado.empresa_prestadora?.prazo_repasse_dias)
-
-                        const isVencido = dtRepasse && dtRepasse < hoje && !isPago
-
-                        return (
-                          <tr key={chamado.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="py-3.5 px-4">
-                              <span className="bg-slate-100 text-slate-500 border px-1.5 py-0.5 rounded text-[9px] font-bold font-mono">
-                                {chamado.imovel?.codigo_imovel}
-                              </span>
-                              <div className="font-extrabold text-occasio-navy mt-1 max-w-[150px] truncate" title={chamado.titulo}>
-                                {chamado.titulo}
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <div className="font-semibold text-slate-700">Proprietário do Imóvel</div>
-                              <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{chamado.imovel?.endereco}</div>
-                            </td>
-                            <td className="py-3.5 px-4 font-semibold text-slate-700">
-                              {chamado.empresa_prestadora?.nome || "Não atribuído"}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <div className="text-[10px] text-slate-500">{condRepasse}</div>
-                              <div className={`font-bold mt-0.5 ${isVencido ? "text-red-500" : "text-slate-700"}`}>
-                                {formatarData(dtRepasse)} {isVencido && <span className="text-[9px] font-extrabold">(VENCIDO)</span>}
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 text-right font-bold text-slate-700">
-                              R$ {valReceber.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="py-3.5 px-4 text-right font-bold text-slate-700">
-                              R$ {valPagar.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="py-3.5 px-4 text-center">
-                              <Badge className={`border text-[9px] font-extrabold uppercase ${
-                                isPago 
-                                  ? "bg-green-50 text-green-700 border-green-200" 
-                                  : (isVencido ? "bg-red-50 text-red-700 border-red-200" : "bg-yellow-50 text-yellow-700 border-yellow-200")
-                              }`}>
-                                {isPago ? "Pago" : (isVencido ? "Atrasado" : "Pendente")}
-                              </Badge>
-                            </td>
-                            <td className="py-3.5 px-4 text-center">
-                              <div className="flex items-center justify-center gap-1.5">
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  onClick={() => setExtratoProprietarioAtivo(chamado)}
-                                  className="h-7 text-[10px] px-2 font-semibold bg-white text-occasio-blue border-slate-200 hover:bg-slate-50 hover:text-occasio-navy flex gap-1 items-center"
-                                >
-                                  <FileText className="h-3 w-3" /> Extrato
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    if (isPago) {
-                                      setChamadosPagos(prev => prev.filter(id => id !== chamado.id))
-                                    } else {
-                                      setChamadosPagos(prev => [...prev, chamado.id])
-                                    }
-                                  }}
-                                  className={`h-7 text-[10px] px-2 font-semibold text-white ${
-                                    isPago ? "bg-amber-500 hover:bg-amber-600" : "bg-green-600 hover:bg-green-700"
-                                  }`}
-                                >
-                                  {isPago ? "Pendente" : "Pagar"}
-                                </Button>
-                              </div>
+                {/* Tabela de Conciliação */}
+                <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          <th className="py-3 px-4">Imóvel/OS</th>
+                          <th className="py-3 px-4">Proprietário (Devedor)</th>
+                          <th className="py-3 px-4">Prestadora PJ (Credor)</th>
+                          <th className="py-3 px-4">Regra / Previsão</th>
+                          <th className="py-3 px-4 text-right">A Receber (Prop)</th>
+                          <th className="py-3 px-4 text-right">A Pagar (PJ)</th>
+                          <th className="py-3 px-4 text-center">Status</th>
+                          <th className="py-3 px-4 text-center">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {chamadosConciliacaoFiltrados.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="text-center py-10 text-slate-400">
+                              Nenhum chamado conciliável encontrado.
                             </td>
                           </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+                        ) : (
+                          chamadosConciliacaoFiltrados.map((chamado) => {
+                            const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+                            if (!orc) return null
+
+                            const isPago = chamado.status_financeiro === "pago"
+                            const isFechado = !!chamado.fechamento_id
+
+                            // Valores
+                            const valReceber = orc.responsavel_material_empresa === 'proprietario' 
+                              ? orc.valor_servico_r$ + orc.valor_materiais_r$ 
+                              : (chamado.responsabilidade === 'proprietario' ? orc.valor_servico_r$ : 0)
+
+                            const valPagar = orc.valor_servico_r$ + (orc.responsavel_material_empresa === 'empresa' ? orc.valor_materiais_r$ : 0)
+
+                            // Prazos
+                            const dataConcl = chamado.data_conclusao || chamado.criado_em
+                            const dtRepasse = calcularDataRepasse(dataConcl, chamado.empresa_prestadora?.tipo_repasse, chamado.empresa_prestadora?.prazo_repasse_dias)
+                            const condRepasse = formatarCondicaoRepasse(chamado.empresa_prestadora?.tipo_repasse, chamado.empresa_prestadora?.prazo_repasse_dias)
+
+                            const isVencido = dtRepasse && dtRepasse < hoje && !isPago
+
+                            return (
+                              <tr key={chamado.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="py-3.5 px-4">
+                                  <span className="bg-slate-100 text-slate-500 border px-1.5 py-0.5 rounded text-[9px] font-bold font-mono">
+                                    {chamado.imovel?.codigo_imovel}
+                                  </span>
+                                  <div className="font-extrabold text-occasio-navy mt-1 max-w-[150px] truncate" title={chamado.titulo}>
+                                    {chamado.titulo}
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="font-semibold text-slate-700">Proprietário do Imóvel</div>
+                                  <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{chamado.imovel?.endereco}</div>
+                                </td>
+                                <td className="py-3.5 px-4 font-semibold text-slate-700">
+                                  {chamado.empresa_prestadora?.nome || "Não atribuído"}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="text-[10px] text-slate-500">{condRepasse}</div>
+                                  <div className={`font-bold mt-0.5 ${isVencido ? "text-red-500" : "text-slate-700"}`}>
+                                    {formatarData(dtRepasse)} {isVencido && <span className="text-[9px] font-extrabold">(VENCIDO)</span>}
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4 text-right font-bold text-slate-700">
+                                  R$ {valReceber.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="py-3.5 px-4 text-right font-bold text-slate-700">
+                                  R$ {valPagar.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="py-3.5 px-4 text-center">
+                                  <Badge className={`border text-[9px] font-extrabold uppercase ${
+                                    isPago 
+                                      ? "bg-green-50 text-green-700 border-green-200" 
+                                      : (isVencido ? "bg-red-50 text-red-700 border-red-200" : "bg-yellow-50 text-yellow-700 border-yellow-200")
+                                  }`}>
+                                    {isPago ? "Pago" : (isVencido ? "Atrasado" : "Pendente")}
+                                  </Badge>
+                                </td>
+                                <td className="py-3.5 px-4 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => setExtratoProprietarioAtivo(chamado)}
+                                      className="h-7 text-[10px] px-2 font-semibold bg-white text-occasio-blue border-slate-200 hover:bg-slate-50 hover:text-occasio-navy flex gap-1 items-center"
+                                    >
+                                      <FileText className="h-3 w-3" /> Extrato
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      disabled={salvandoAcao || isFechado}
+                                      onClick={async () => {
+                                        setSalvandoAcao(true)
+                                        try {
+                                          const novoStatusFin = isPago ? "pendente" : "pago"
+                                          const { error } = await supabase
+                                            .from("chamados")
+                                            .update({ status_financeiro: novoStatusFin })
+                                            .eq("id", chamado.id)
+                                          if (error) throw error
+                                          await loadChamados()
+                                        } catch (err: any) {
+                                          console.error(err)
+                                          alert(err.message || "Erro ao atualizar pagamento.")
+                                        } finally {
+                                          setSalvandoAcao(false)
+                                        }
+                                      }}
+                                      className={`h-7 text-[10px] px-2 font-semibold text-white ${
+                                        isFechado 
+                                          ? "bg-slate-300 border-slate-300 text-slate-500 cursor-not-allowed" 
+                                          : (isPago ? "bg-amber-500 hover:bg-amber-600" : "bg-green-600 hover:bg-green-700")
+                                      }`}
+                                    >
+                                      {isFechado ? "Fechado" : (isPago ? "Pendente" : "Pagar")}
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              </>
+            ) : (
+              /* Histórico de Fechamentos */
+              <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        <th className="py-3 px-4">Competência</th>
+                        <th className="py-3 px-4">Data do Fechamento</th>
+                        <th className="py-3 px-4">Operador</th>
+                        <th className="py-3 px-4 text-right">Desconto Proprietários</th>
+                        <th className="py-3 px-4 text-right">Repasse Prestadoras</th>
+                        <th className="py-3 px-4 text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {carregandoFechamentos ? (
+                        <tr>
+                          <td colSpan={6} className="text-center py-10 text-slate-400">
+                            Carregando histórico...
+                          </td>
+                        </tr>
+                      ) : fechamentos.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="text-center py-10 text-slate-400">
+                            Nenhum fechamento mensal registrado ainda.
+                          </td>
+                        </tr>
+                      ) : (
+                        fechamentos.map((f) => (
+                          <tr key={f.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="py-3.5 px-4 font-bold text-occasio-navy">
+                              {String(f.mes).padStart(2, '0')}/{f.ano}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600">
+                              {new Date(f.criado_em).toLocaleDateString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600">
+                              {f.criado_por?.nome || "Sistema"}
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-semibold text-slate-700">
+                              R$ {Number(f.total_receber_proprietarios).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-semibold text-slate-700">
+                              R$ {Number(f.total_pagar_prestadores).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setFechamentoSelecionado(f)
+                                  setExibirModalDetalhesFechamento(true)
+                                }}
+                                className="h-7 text-[10px] px-2.5 font-bold bg-occasio-blue hover:bg-occasio-navy text-white"
+                              >
+                                <FileText className="h-3.5 w-3.5 mr-1" /> Detalhes / Extrato
+                              </Button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
           </div>
         )
       })()}
@@ -2151,6 +2404,292 @@ Extrato gerado eletronicamente para fins de conciliação.
           onClose={() => setMostrarLaudo(false)}
         />
       )}
+
+      {/* Modal de Realizar Fechamento Mensal */}
+      {exibirModalNovoFechamento && (() => {
+        const chamadosCompetencia = chamados.filter(c => {
+          if (c.status !== 'servico_concluido' && c.status !== 'encerrado') return false
+          const orc = c.orcamentos && c.orcamentos.find(o => o.homologado_pela_empresa)
+          if (!orc) return false
+          if (c.fechamento_id) return false
+          
+          const dataRef = c.data_conclusao ? new Date(c.data_conclusao) : new Date(c.criado_em)
+          return dataRef.getMonth() + 1 === mesFechamento && dataRef.getFullYear() === anoFechamento
+        })
+
+        let prevReceber = 0
+        let prevPagar = 0
+        chamadosCompetencia.forEach(c => {
+          const orc = c.orcamentos?.find(o => o.homologado_pela_empresa)
+          if (!orc) return
+          if (orc.responsavel_material_empresa === 'proprietario') {
+            prevReceber += Number(orc.valor_servico_r$) + Number(orc.valor_materiais_r$)
+          } else if (c.responsabilidade === 'proprietario') {
+            prevReceber += Number(orc.valor_servico_r$)
+          }
+          const matPagar = orc.responsavel_material_empresa === 'empresa' ? Number(orc.valor_materiais_r$) : 0
+          prevPagar += Number(orc.valor_servico_r$) + matPagar
+        })
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <Card className="w-full max-w-md border-slate-200 shadow-2xl bg-white animate-in zoom-in-95 duration-150">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
+                <CardTitle className="text-sm font-extrabold text-occasio-navy flex items-center gap-1.5 justify-between">
+                  <span>Realizar Fechamento Mensal</span>
+                  <button onClick={() => setExibirModalNovoFechamento(false)} className="text-slate-400 hover:text-slate-600 text-xs">
+                    ✕
+                  </button>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Selecione a competência para faturar e conciliar todas as OS's concluídas de forma definitiva.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Mês *</label>
+                    <select
+                      value={mesFechamento}
+                      onChange={(e) => setMesFechamento(Number(e.target.value))}
+                      className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                        <option key={m} value={m}>{String(m).padStart(2, '0')} - {new Date(2000, m - 1).toLocaleString('pt-BR', { month: 'long' })}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Ano *</label>
+                    <select
+                      value={anoFechamento}
+                      onChange={(e) => setAnoFechamento(Number(e.target.value))}
+                      className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs"
+                    >
+                      {[2025, 2026, 2027].map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded border border-slate-100 space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">OS's Elegíveis:</span>
+                    <strong className="text-slate-700">{chamadosCompetencia.length}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Total a Receber (Proprietários):</span>
+                    <strong className="text-green-600">R$ {prevReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Total a Pagar (Prestadoras):</span>
+                    <strong className="text-amber-600">R$ {prevPagar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                  </div>
+                  <div className="flex justify-between border-t pt-1.5 font-bold">
+                    <span className="text-slate-700">Saldo Intermediado:</span>
+                    <span className={prevReceber - prevPagar >= 0 ? "text-green-600" : "text-amber-600"}>
+                      R$ {(prevReceber - prevPagar).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                {chamadosCompetencia.length > 0 ? (
+                  <div className="max-h-32 overflow-y-auto border border-slate-100 rounded p-2 bg-white text-[10px] space-y-1.5">
+                    {chamadosCompetencia.map(c => (
+                      <div key={c.id} className="flex justify-between text-slate-500 hover:text-slate-800 border-b pb-1 last:border-0 last:pb-0">
+                        <span className="truncate max-w-[200px]" title={c.titulo}>
+                          [{c.imovel?.codigo_imovel}] {c.titulo}
+                        </span>
+                        <span className="font-semibold text-slate-700 font-mono">
+                          {c.orcamentos?.find(o => o.homologado_pela_empresa)?.valor_total_r$?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-red-500 font-medium text-center">
+                    Nenhuma OS pronta/concluída encontrada para esta competência.
+                  </p>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    disabled={salvandoFechamento || chamadosCompetencia.length === 0}
+                    onClick={handleExecutarFechamento}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold"
+                  >
+                    {salvandoFechamento ? "Processando..." : "Confirmar Fechamento"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setExibirModalNovoFechamento(false)}
+                    className="flex-1 border-slate-200 text-xs text-slate-600 hover:bg-slate-50 bg-white"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )
+      })()}
+
+      {/* Modal de Detalhes / Extrato do Fechamento */}
+      {exibirModalDetalhesFechamento && fechamentoSelecionado && (() => {
+        const f = fechamentoSelecionado
+        const chamadosFechados = chamados.filter(c => c.fechamento_id === f.id)
+
+        const proprietariosMap: { [nome: string]: number } = {}
+        const prestadorasMap: { [nome: string]: number } = {}
+        const inquilinosMap: { [nome: string]: number } = {}
+
+        chamadosFechados.forEach(c => {
+          const orc = c.orcamentos?.find(o => o.homologado_pela_empresa)
+          if (!orc) return
+
+          let valProp = 0
+          if (orc.responsavel_material_empresa === 'proprietario') {
+            valProp = Number(orc.valor_servico_r$) + Number(orc.valor_materiais_r$)
+          } else if (c.responsabilidade === 'proprietario') {
+            valProp = Number(orc.valor_servico_r$)
+          }
+          if (valProp > 0) {
+            const nomeProp = c.imovel?.proprietario?.nome || "Proprietário Sem Nome"
+            proprietariosMap[nomeProp] = (proprietariosMap[nomeProp] || 0) + valProp
+          }
+
+          const matPagar = orc.responsavel_material_empresa === 'empresa' ? Number(orc.valor_materiais_r$) : 0
+          const valPrest = Number(orc.valor_servico_r$) + matPagar
+          if (valPrest > 0) {
+            const nomePrest = c.empresa_prestadora?.nome || "Prestadora PJ Sem Nome"
+            prestadorasMap[nomePrest] = (prestadorasMap[nomePrest] || 0) + valPrest
+          }
+
+          let valInq = 0
+          if (c.responsabilidade === 'proprietario' && c.descricao_problema.toLowerCase().includes('reembolso')) {
+            valInq = Number(orc.valor_materiais_r$)
+          }
+          if (valInq > 0) {
+            const nomeInq = c.inquilino?.nome || "Inquilino Sem Nome"
+            inquilinosMap[nomeInq] = (inquilinosMap[nomeInq] || 0) + valInq
+          }
+        })
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <Card className="w-full max-w-lg border-slate-200 shadow-2xl bg-white animate-in zoom-in-95 duration-150 max-h-[85vh] flex flex-col">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4 flex-shrink-0">
+                <CardTitle className="text-sm font-extrabold text-occasio-navy flex items-center gap-1.5 justify-between">
+                  <span>Fechamento Mensal Competência: {String(f.mes).padStart(2, '0')}/{f.ano}</span>
+                  <button onClick={() => setExibirModalDetalhesFechamento(false)} className="text-slate-400 hover:text-slate-600 text-xs">
+                    ✕
+                  </button>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Relatório consolidado e definitivo de contas fechadas em {new Date(f.criado_em).toLocaleDateString('pt-BR')} por {f.criado_por?.nome || "Sistema"}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-4 overflow-y-auto flex-grow">
+                <div className="grid grid-cols-3 gap-3 text-center border-b pb-4">
+                  <div className="bg-green-50/50 p-2.5 rounded border border-green-100">
+                    <div className="text-[9px] font-bold text-green-700 uppercase">Recebido (Proprietários)</div>
+                    <div className="text-sm font-black text-green-800 mt-0.5 font-mono">R$ {Number(f.total_receber_proprietarios).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                  </div>
+                  <div className="bg-amber-50/50 p-2.5 rounded border border-amber-100">
+                    <div className="text-[9px] font-bold text-amber-700 uppercase">Pago (Prestadores)</div>
+                    <div className="text-sm font-black text-amber-800 mt-0.5 font-mono">R$ {Number(f.total_pagar_prestadores).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                  </div>
+                  <div className="bg-slate-50 p-2.5 rounded border border-slate-200/60">
+                    <div className="text-[9px] font-bold text-slate-600 uppercase">Margem Retida</div>
+                    <div className="text-sm font-black text-slate-800 mt-0.5 font-mono">
+                      R$ {(Number(f.total_receber_proprietarios) - Number(f.total_pagar_prestadores)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 border-b pb-1">
+                    👤 Deduções de Aluguel (Proprietários)
+                  </h4>
+                  {Object.keys(proprietariosMap).length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic">Nenhum desconto lançado para proprietários nesta competência.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-24 overflow-y-auto">
+                      {Object.entries(proprietariosMap).map(([nome, valor]) => (
+                        <div key={nome} className="flex justify-between text-xs border-b border-dashed pb-1">
+                          <span className="text-slate-600 font-medium">{nome}</span>
+                          <strong className="text-slate-800 font-mono">R$ {valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 border-b pb-1">
+                    🔑 Reembolsos Devidos (Inquilinos)
+                  </h4>
+                  {Object.keys(inquilinosMap).length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic">Nenhum reembolso de material lançado para inquilinos nesta competência.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-24 overflow-y-auto">
+                      {Object.entries(inquilinosMap).map(([nome, valor]) => (
+                        <div key={nome} className="flex justify-between text-xs border-b border-dashed pb-1">
+                          <span className="text-slate-600 font-medium">{nome}</span>
+                          <strong className="text-green-600 font-mono">R$ {valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 border-b pb-1">
+                    🏢 Repasses Faturados (Prestadoras PJ)
+                  </h4>
+                  {Object.keys(prestadorasMap).length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic">Nenhum faturamento de prestadora lançado nesta competência.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-24 overflow-y-auto">
+                      {Object.entries(prestadorasMap).map(([nome, valor]) => (
+                        <div key={nome} className="flex justify-between text-xs border-b border-dashed pb-1">
+                          <span className="text-slate-600 font-medium">{nome}</span>
+                          <strong className="text-slate-800 font-mono">R$ {valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 border-b pb-1">
+                    📁 OS's Vinculadas ({chamadosFechados.length})
+                  </h4>
+                  <div className="max-h-32 overflow-y-auto border rounded p-2 bg-slate-50/50 space-y-1.5 text-[10px]">
+                    {chamadosFechados.map(c => (
+                      <div key={c.id} className="flex justify-between text-slate-500 border-b pb-1 last:border-0 last:pb-0">
+                        <span>[{c.imovel?.codigo_imovel}] {c.titulo}</span>
+                        <span className="font-semibold text-slate-700 font-mono">
+                          {c.orcamentos?.find(o => o.homologado_pela_empresa)?.valor_total_r$?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+              <div className="border-t border-slate-100 bg-slate-50/50 p-4 flex gap-2 flex-shrink-0">
+                <Button
+                  onClick={() => setExibirModalDetalhesFechamento(false)}
+                  className="w-full bg-occasio-blue hover:bg-occasio-navy text-white text-xs font-bold"
+                >
+                  Fechar Extrato
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )
+      })()}
     </div>
   )
 }

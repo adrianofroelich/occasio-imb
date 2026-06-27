@@ -95,6 +95,17 @@ Nem todos os proprietários de imóveis acessam ou desejam acessar o painel digi
 
 ---
 
+## 📅 Conciliação Financeira Definitiva e Fechamento Mensal
+
+A conciliação definitiva de saldos e fechamento de competência de ordens de serviço é centralizada no painel da imobiliária na aba "Financeiro / Repasses":
+
+1. **Sub-Abas de Navegação:** Alternância limpa e responsiva entre "Lotes de Acerto / Conciliação" (lista de OSs pendentes e liquidadas individualmente) e "Histórico de Fechamentos Mensais".
+2. **Conciliação e Pagamento Individual Persistente:** O botão "Pagar/Pendente" altera diretamente no banco de dados o campo `status_financeiro` (`pago` / `pendente`).
+3. **Novo Fechamento Mensal (Competência):** O operador pode selecionar a competência (mês/ano) e visualizar um preview consolidado (saldo intermediado, repasses previstos e OSs elegíveis). Ao confirmar, o sistema persiste o registro na tabela `fechamentos_mensais`, associa as OSs ao fechamento correspondente (`fechamento_id`), bloqueando-as contra novas alterações manuais.
+4. **Relatório Detalhado de Fechamento (Extratos Consolidados):** Detalhamento completo da competência com o fechamento consolidado, dividindo descontos de aluguel por proprietário, repasses a prestadoras PJ e reembolsos devidos a inquilinos (reembolsos de materiais).
+
+---
+
 ## 📁 Estrutura de Pastas (Mapa do Projeto)
 
 ```bash
