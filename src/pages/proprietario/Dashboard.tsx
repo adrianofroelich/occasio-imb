@@ -43,6 +43,7 @@ interface Chamado {
     prazo_execucao_dias: number
     observacoes_tecnicas: string
     aprovado_pelo_proprietario: boolean
+    relatorio_conclusao?: string
     prestador: {
       nome: string
     }
@@ -130,6 +131,7 @@ export default function ProprietarioDashboard() {
             prazo_execucao_dias,
             observacoes_tecnicas,
             aprovado_pelo_proprietario,
+            relatorio_conclusao,
             prestador:prestador_id (nome)
           )
         `)
@@ -155,6 +157,7 @@ export default function ProprietarioDashboard() {
             prazo_execucao_dias,
             observacoes_tecnicas,
             aprovado_pelo_proprietario,
+            relatorio_conclusao,
             prestador:prestador_id (nome)
           )
         `)

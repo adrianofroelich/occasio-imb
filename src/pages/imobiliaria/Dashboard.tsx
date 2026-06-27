@@ -75,6 +75,11 @@ interface Chamado {
     observacoes_tecnicas: string
     homologado_pela_empresa: boolean
     prestador_id: string
+    relatorio_conclusao?: string
+    valor_total_r$?: number
+    prestador?: {
+      nome: string
+    } | null
   }[]
 }
 
@@ -488,14 +493,17 @@ export default function Dashboard() {
             id,
             valor_servico_r$,
             valor_materiais_r$,
+            valor_total_r$,
             valor_servico_tecnico_r$,
             valor_materiais_tecnico_r$,
             responsavel_material_tecnico,
             responsavel_material_empresa,
             prazo_execucao_dias,
             observacoes_tecnicas,
+            relatorio_conclusao,
             homologado_pela_empresa,
-            prestador_id
+            prestador_id,
+            prestador:prestador_id (nome)
           )
         `)
         .order("criado_em", { ascending: false })
