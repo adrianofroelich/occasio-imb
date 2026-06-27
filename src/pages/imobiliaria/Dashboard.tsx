@@ -11,7 +11,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Wrench, ShieldAlert, Clock, CheckSquare, RefreshCw, Filter, 
-  AlertCircle, FileText, User, HelpCircle, Loader2, Hammer, CheckCircle2, Plus
+  AlertCircle, FileText, User, HelpCircle, Loader2, Hammer, CheckCircle2, Plus,
+  Calendar, MapPin, UserCheck
 } from "lucide-react"
 
 // Interfaces de tipos mapeados
@@ -40,6 +41,9 @@ interface Chamado {
     codigo_imovel: string
     endereco: string
     limite_alcada_r$: number
+    proprietario?: {
+      nome: string
+    } | null
   }
   inquilino: {
     nome: string
@@ -461,7 +465,12 @@ export default function Dashboard() {
         .from("chamados")
         .select(`
           *,
-          imovel:imovel_id (codigo_imovel, endereco, limite_alcada_r$),
+          imovel:imovel_id (
+            codigo_imovel,
+            endereco,
+            limite_alcada_r$,
+            proprietario:proprietario_id (nome)
+          ),
           inquilino:inquilino_id (nome),
           empresa_prestadora:empresa_prestadora_id (id, nome, tipo_repasse, prazo_repasse_dias),
           tecnico:tecnico_id (nome),
@@ -1110,9 +1119,24 @@ export default function Dashboard() {
                   <CardContent className="p-5">
                     <div className="flex flex-col sm:flex-row justify-between items-start gap-3 mb-3">
                       <div>
-                        <span className="bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider font-mono">
-                          Imóvel: {chamado.imovel.codigo_imovel}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span 
+                            className="relative group bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider font-mono cursor-help"
+                            title={chamado.imovel.endereco}
+                          >
+                            Imóvel: {chamado.imovel.codigo_imovel}
+                            {/* Tooltip customizado */}
+                            <span className="absolute left-0 top-full mt-1 hidden group-hover:block w-72 bg-slate-900 text-white text-[11px] font-normal normal-case rounded p-2.5 shadow-xl z-50 border border-slate-700 leading-relaxed pointer-events-none">
+                              <span className="block font-bold text-slate-300 mb-0.5">Endereço Completo:</span>
+                              {chamado.imovel.endereco}
+                            </span>
+                          </span>
+                          
+                          <span className="text-[11px] text-slate-400 flex items-center gap-1 max-w-[180px] sm:max-w-[280px]" title={chamado.imovel.endereco}>
+                            <MapPin className="h-3 w-3 text-slate-300 shrink-0" />
+                            <span className="truncate">{chamado.imovel.endereco}</span>
+                          </span>
+                        </div>
                         <h3 className="text-base font-extrabold text-occasio-navy mt-1.5">{chamado.titulo}</h3>
                       </div>
                       <div className="flex flex-wrap gap-2 items-center">
@@ -1129,14 +1153,33 @@ export default function Dashboard() {
                       {chamado.descricao_problema}
                     </p>
 
-                    <div className="flex flex-wrap justify-between items-center border-t border-slate-100 pt-3 text-[11px] text-slate-400">
-                      <div className="flex items-center gap-1.5">
-                        <User className="h-3.5 w-3.5 text-slate-300" />
-                        <span>Inquilino: <strong className="text-slate-600 font-semibold">{chamado.inquilino.nome}</strong></span>
+                    <div className="border-t border-slate-100 pt-3 text-[11px] text-slate-400 space-y-2">
+                      <div className="flex flex-wrap justify-between items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <User className="h-3.5 w-3.5 text-slate-300" />
+                            <span>Inquilino: <strong className="text-slate-600 font-semibold">{chamado.inquilino.nome}</strong></span>
+                          </div>
+                          {chamado.imovel.proprietario?.nome && (
+                            <div className="flex items-center gap-1.5 border-l border-slate-200 pl-3">
+                              <UserCheck className="h-3.5 w-3.5 text-slate-300" />
+                              <span>Proprietário: <strong className="text-slate-600 font-semibold">{chamado.imovel.proprietario.nome}</strong></span>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          Criado em: <strong>{new Date(chamado.criado_em).toLocaleDateString('pt-BR')}</strong>
+                        </div>
                       </div>
-                      <div>
-                        Criado em: <strong>{new Date(chamado.criado_em).toLocaleDateString('pt-BR')}</strong>
-                      </div>
+
+                      {chamado.disponibilidade_atendimento && (
+                        <div className="flex items-center gap-1.5 text-slate-500 bg-slate-50 p-1.5 rounded border border-slate-100">
+                          <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span>
+                            Preferência de atendimento: <strong className="text-slate-700 font-semibold">{chamado.disponibilidade_atendimento}</strong>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
