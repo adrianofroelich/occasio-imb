@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Calendar, Camera, Wrench, CheckCircle2, 
-  AlertTriangle, Loader2, RefreshCw, Landmark, History, AlertCircle 
+  AlertTriangle, Loader2, RefreshCw, Landmark, History, AlertCircle, Plus
 } from "lucide-react"
 
 // Tipagens locais
@@ -58,8 +58,13 @@ export default function InquilinoDashboard() {
   
   // Dados do imóvel e chamados
   const [imovel, setImovel] = useState<Imovel | null>(null)
+  const [chamadosAtivos, setChamadosAtivos] = useState<Chamado[]>([])
   const [chamadoAtivo, setChamadoAtivo] = useState<Chamado | null>(null)
   const [historico, setHistorico] = useState<Chamado[]>([])
+
+  // Controle de Abas
+  const [activeTab, setActiveTab] = useState<string>("novo")
+  const [hasSetInitialTab, setHasSetInitialTab] = useState(false)
   
   // Loading e alertas
   const [loading, setLoading] = useState(true)
@@ -82,6 +87,16 @@ export default function InquilinoDashboard() {
   // Estados para galeria de mídias e zoom de imagens
   const [midias, setMidias] = useState<{ id: string; url_storage: string; tipo_midia: string }[]>([])
   const [urlImagemZoom, setUrlImagemZoom] = useState<string | null>(null)
+
+  // Sincroniza o chamado ativo baseado na aba selecionada (activeTab)
+  useEffect(() => {
+    if (activeTab === "novo") {
+      setChamadoAtivo(null)
+    } else {
+      const ativo = chamadosAtivos.find(c => c.id === activeTab)
+      setChamadoAtivo(ativo || null)
+    }
+  }, [activeTab, chamadosAtivos])
 
   // Sincroniza mídias do chamado ativo do inquilino
   useEffect(() => {
@@ -131,12 +146,28 @@ export default function InquilinoDashboard() {
 
         const listaChamados = chamadosData as Chamado[] || []
         
-        // Identifica se há algum chamado ativo (qualquer status que não seja encerrado ou reprovado)
-        const ativo = listaChamados.find(c => c.status !== 'encerrado' && c.status !== 'reprovado')
+        // Identifica se há chamados ativos (qualquer status que não seja encerrado ou reprovado)
+        const ativos = listaChamados.filter(c => c.status !== 'encerrado' && c.status !== 'reprovado')
         const passados = listaChamados.filter(c => c.status === 'encerrado' || c.status === 'reprovado')
         
-        setChamadoAtivo(ativo || null)
+        setChamadosAtivos(ativos)
         setHistorico(passados)
+
+        // Gerencia a seleção da aba ativa no carregamento
+        if (!hasSetInitialTab) {
+          if (ativos.length > 0) {
+            setActiveTab(ativos[0].id)
+          } else {
+            setActiveTab("novo")
+          }
+          setHasSetInitialTab(true)
+        } else {
+          setActiveTab(currentTab => {
+            if (currentTab === "novo") return "novo"
+            const aindaExiste = ativos.some(c => c.id === currentTab)
+            return aindaExiste ? currentTab : (ativos[0]?.id || "novo")
+          })
+        }
       }
     } catch (err: any) {
       console.error(err)
@@ -282,6 +313,9 @@ export default function InquilinoDashboard() {
       setImagemPreview(null)
       if (fileInputRef.current) fileInputRef.current.value = ""
 
+      // Define a aba ativa para o novo chamado
+      setActiveTab(chamadoCriado.id)
+
       // Recarrega os dados
       await loadInquilinoData()
 
@@ -358,246 +392,290 @@ export default function InquilinoDashboard() {
           <Loader2 className="h-8 w-8 animate-spin text-occasio-blue" />
           <span>Verificando chamados de manutenção...</span>
         </div>
-      ) : chamadoAtivo ? (
-        /* ======================== VISUALIZAÇÃO DE CHAMADO ATIVO ======================== */
-        <div className="space-y-6">
-          <Card className="border-slate-200 shadow-md bg-white">
-            <CardHeader className="bg-occasio-navy text-white rounded-t-lg">
-              <div className="flex justify-between items-center">
-                <div>
-                  <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded font-semibold uppercase tracking-wider">
-                    {chamadoAtivo.categoria}
-                  </span>
-                  <CardTitle className="text-base font-extrabold mt-1">{chamadoAtivo.titulo}</CardTitle>
-                </div>
-                <Badge className="bg-occasio-blue text-white hover:bg-occasio-blue px-2.5 py-0.5 rounded-full border border-white/20 text-[10px] font-bold uppercase tracking-wide">
-                  {chamadoAtivo.status.replace("_", " ")}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-5 space-y-4 text-sm text-slate-700">
-              <div>
-                <strong className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Descrição do Problema</strong>
-                <p className="bg-slate-50 p-3 rounded text-slate-600 border border-slate-200/50 leading-relaxed text-xs">
-                  {chamadoAtivo.descricao_problema}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <strong className="font-semibold text-slate-400 block mb-0.5">Disponibilidade</strong>
-                  <span className="text-slate-700 flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5 text-occasio-blue" /> {chamadoAtivo.disponibilidade_atendimento}
-                  </span>
-                </div>
-                <div>
-                  <strong className="font-semibold text-slate-400 block mb-0.5">Abertura</strong>
-                  <span className="text-slate-700">
-                    {new Date(chamadoAtivo.criado_em).toLocaleDateString('pt-BR')}
-                  </span>
-                </div>
-              </div>
+      ) : (
+        <>
+          {/* Abas de Chamados */}
+          {imovel && (
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-px mb-6 overflow-x-auto no-scrollbar scroll-smooth">
+              <button
+                type="button"
+                onClick={() => setActiveTab("novo")}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all duration-200 ${
+                  activeTab === "novo"
+                    ? "border-occasio-blue text-occasio-blue font-extrabold"
+                    : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                }`}
+              >
+                <Plus className="h-4 w-4" />
+                Nova Solicitação
+              </button>
+              
+              {chamadosAtivos.map((chamado) => {
+                const isSelected = activeTab === chamado.id
+                return (
+                  <button
+                    type="button"
+                    key={chamado.id}
+                    onClick={() => setActiveTab(chamado.id)}
+                    className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all duration-200 ${
+                      isSelected
+                        ? "border-occasio-blue text-occasio-blue font-extrabold"
+                        : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                    }`}
+                  >
+                    <Wrench className="h-4 w-4" />
+                    <span className="max-w-[120px] truncate">{chamado.titulo}</span>
+                    <span className="text-[9px] bg-slate-100 text-slate-500 border border-slate-200 px-1 py-0.5 rounded font-mono font-bold uppercase">
+                      {chamado.status.replace("_", " ")}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
-              {/* Galeria de Fotos com Zoom */}
-              {midias.length > 0 && (
-                <div className="pt-4 border-t border-slate-100 mt-2">
-                  <strong className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Fotos Anexadas</strong>
-                  <div className="grid grid-cols-2 gap-2">
-                    {midias.map((midia) => (
-                      <div 
-                        key={midia.id} 
-                        onClick={() => setUrlImagemZoom(midia.url_storage)}
-                        className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
-                      >
-                        <img 
-                          src={midia.url_storage} 
-                          alt={`Foto do chamado - ${midia.tipo_midia}`}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                        />
-                        <div className="absolute inset-x-0 bottom-0 bg-black/60 text-[9px] text-white py-0.5 px-1 font-semibold text-center capitalize">
-                          Foto: {midia.tipo_midia}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Linha do Tempo Reativa (Timeline PWA) */}
-          <Card className="border-slate-200 shadow-md bg-white">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <CardTitle className="text-sm font-extrabold text-occasio-navy">Acompanhamento do Conserto</CardTitle>
-              <CardDescription className="text-xs">Timeline atualizada automaticamente a cada mudança.</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="relative pl-6 border-l border-slate-200 space-y-6">
-                {STATUS_TIMELINE.map((item, idx) => {
-                  const indiceAtual = getIndiceStatusAtual(chamadoAtivo.status)
-                  const isPassou = idx < indiceAtual
-                  const isAtivo = chamadoAtivo.status === item.status || (idx === indiceAtual)
-                  const isFuturo = idx > indiceAtual && !isAtivo
-
-                  return (
-                    <div key={item.status} className="relative">
-                      {/* Indicador de Bolinha da Timeline */}
-                      <span className={`absolute -left-[31px] top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all ${
-                        isPassou ? "bg-green-500 border-green-500 text-white" :
-                        isAtivo ? "bg-white border-occasio-blue ring-2 ring-occasio-blue/20" :
-                        "bg-white border-slate-200"
-                      }`}>
-                        {isPassou && <CheckCircle2 className="h-3.5 w-3.5" />}
+          {activeTab !== "novo" && chamadoAtivo ? (
+            /* ======================== VISUALIZAÇÃO DE CHAMADO ATIVO ======================== */
+            <div className="space-y-6">
+              <Card className="border-slate-200 shadow-md bg-white">
+                <CardHeader className="bg-occasio-navy text-white rounded-t-lg">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded font-semibold uppercase tracking-wider">
+                        {chamadoAtivo.categoria}
                       </span>
-
-                      {/* Conteúdo Textual */}
-                      <div className={isFuturo ? "opacity-45" : ""}>
-                        <h4 className={`text-xs font-bold leading-none ${isAtivo ? "text-occasio-blue text-sm font-extrabold" : "text-slate-700"}`}>
-                          {item.label}
-                        </h4>
-                        {isAtivo && (
-                          <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                            {item.desc}
-                          </p>
-                        )}
-                      </div>
+                      <CardTitle className="text-base font-extrabold mt-1">{chamadoAtivo.titulo}</CardTitle>
                     </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : imovel ? (
-        /* ======================== FORMULÁRIO DE CADASTRO DE CHAMADO ======================== */
-        <Card className="border-slate-200 shadow-md bg-white">
-          <CardHeader className="bg-slate-50 border-b border-slate-200">
-            <CardTitle className="text-base font-extrabold text-occasio-navy flex items-center gap-2">
-              <Wrench className="h-5 w-5 text-occasio-blue" /> Solicitar Manutenção
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Descreva o problema no imóvel para que possamos enviar um técnico parceiro.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Título do Chamado (O que aconteceu?) *
-                </label>
-                <Input
-                  placeholder="Ex: Vazamento sob a pia da cozinha"
-                  value={titulo}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitulo(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Categoria da Ocorrência *
-                </label>
-                <select
-                  value={categoria}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCategoria(e.target.value)}
-                  required
-                  className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
-                >
-                  <option value="">Selecione a Categoria...</option>
-                  <option value="Hidráulica">Hidráulica (Vazamento, Cano quebrado)</option>
-                  <option value="Elétrica">Elétrica (Curto-circuito, Chuveiro, Tomadas)</option>
-                  <option value="Alvenaria">Alvenaria/Estrutura (Rachaduras, Infiltrações)</option>
-                  <option value="Pintura">Pintura e Acabamento</option>
-                  <option value="Serralheria">Serralheria e Portas/Janelas</option>
-                  <option value="Outros">Outros Reparos</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Descrição Detalhada do Problema *
-                </label>
-                <textarea
-                  rows={4}
-                  placeholder="Descreva detalhadamente o problema. Ex: O cano de entrada de água sob a pia está gotejando muito quando a torneira é aberta, alagando o gabinete."
-                  value={descricao}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescricao(e.target.value)}
-                  required
-                  className="w-full border border-slate-200 rounded-md p-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Melhores Dias e Horários para Atendimento *
-                </label>
-                <Input
-                  placeholder="Ex: Seg a Sex das 14h às 18h"
-                  value={disponibilidade}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisponibilidade(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Foto do Problema (Upload com Compressão Automática)
-                </label>
-                <div className="mt-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-lg p-6 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                  {imagemPreview ? (
-                    <div className="relative w-full flex flex-col items-center">
-                      <img src={imagemPreview} alt="Preview do Problema" className="max-h-40 rounded shadow-md object-contain mb-3" />
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        type="button"
-                        onClick={() => { setImagem(null); setImagemPreview(null) }}
-                        className="text-xs text-red-600 border-red-200 hover:bg-red-50"
-                      >
-                        Remover Foto
-                      </Button>
+                    <Badge className="bg-occasio-blue text-white hover:bg-occasio-blue px-2.5 py-0.5 rounded-full border border-white/20 text-[10px] font-bold uppercase tracking-wide">
+                      {chamadoAtivo.status.replace("_", " ")}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-5 space-y-4 text-sm text-slate-700">
+                  <div>
+                    <strong className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Descrição do Problema</strong>
+                    <p className="bg-slate-50 p-3 rounded text-slate-600 border border-slate-200/50 leading-relaxed text-xs">
+                      {chamadoAtivo.descricao_problema}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <strong className="font-semibold text-slate-400 block mb-0.5">Disponibilidade</strong>
+                      <span className="text-slate-700 flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5 text-occasio-blue" /> {chamadoAtivo.disponibilidade_atendimento}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="space-y-2 text-center flex flex-col items-center">
-                      <Camera className="h-8 w-8 text-slate-400" />
-                      <div className="flex text-xs text-slate-500">
-                        <label className="relative cursor-pointer bg-white rounded-md font-semibold text-occasio-blue hover:text-occasio-navy focus-within:outline-none">
-                          <span>Tirar Foto / Selecionar Arquivo</span>
-                          <input 
-                            ref={fileInputRef} 
-                            type="file" 
-                            accept="image/*" 
-                            onChange={handleImageChange} 
-                            className="sr-only" 
-                          />
-                        </label>
+                    <div>
+                      <strong className="font-semibold text-slate-400 block mb-0.5">Abertura</strong>
+                      <span className="text-slate-700">
+                        {new Date(chamadoAtivo.criado_em).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Galeria de Fotos com Zoom */}
+                  {midias.length > 0 && (
+                    <div className="pt-4 border-t border-slate-100 mt-2">
+                      <strong className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Fotos Anexadas</strong>
+                      <div className="grid grid-cols-2 gap-2">
+                        {midias.map((midia) => (
+                          <div 
+                            key={midia.id} 
+                            onClick={() => setUrlImagemZoom(midia.url_storage)}
+                            className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                          >
+                            <img 
+                              src={midia.url_storage} 
+                              alt={`Foto do chamado - ${midia.tipo_midia}`}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            />
+                            <div className="absolute inset-x-0 bottom-0 bg-black/60 text-[9px] text-white py-0.5 px-1 font-semibold text-center capitalize">
+                              Foto: {midia.tipo_midia}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <p className="text-[10px] text-slate-400">Fotos de até 10MB serão comprimidas nativamente para 2MB.</p>
                     </div>
                   )}
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              <Button 
-                disabled={salvando} 
-                type="submit" 
-                className="w-full bg-occasio-blue hover:bg-occasio-navy text-white text-xs font-semibold h-10 shadow-md"
-              >
-                {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Registrar Chamado
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      ) : (
-        /* Aviso de cadastro sem imóvel */
-        <Card className="border-slate-200 border-dashed bg-slate-100/50 shadow-none py-16 px-6 text-center text-slate-400">
-          <div className="flex flex-col items-center justify-center gap-3">
-            <AlertTriangle className="h-12 w-12 text-amber-500" />
-            <div className="text-sm font-semibold text-slate-600">Aguardando Vinculação do Imóvel</div>
-            <p className="max-w-xs mx-auto text-xs text-slate-400 leading-relaxed">
-              O seu perfil de inquilino ainda não possui nenhum imóvel ativo associado. Por favor, entre em contato com sua Imobiliária para que eles cadastrem e vinculem o imóvel ao seu perfil.
-            </p>
-          </div>
-        </Card>
+              {/* Linha do Tempo Reativa (Timeline PWA) */}
+              <Card className="border-slate-200 shadow-md bg-white">
+                <CardHeader className="pb-3 border-b border-slate-100">
+                  <CardTitle className="text-sm font-extrabold text-occasio-navy">Acompanhamento do Conserto</CardTitle>
+                  <CardDescription className="text-xs">Timeline atualizada automaticamente a cada mudança.</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="relative pl-6 border-l border-slate-200 space-y-6">
+                    {STATUS_TIMELINE.map((item, idx) => {
+                      const indiceAtual = getIndiceStatusAtual(chamadoAtivo.status)
+                      const isPassou = idx < indiceAtual
+                      const isAtivo = chamadoAtivo.status === item.status || (idx === indiceAtual)
+                      const isFuturo = idx > indiceAtual && !isAtivo
+
+                      return (
+                        <div key={item.status} className="relative">
+                          {/* Indicador de Bolinha da Timeline */}
+                          <span className={`absolute -left-[31px] top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all ${
+                            isPassou ? "bg-green-500 border-green-500 text-white" :
+                            isAtivo ? "bg-white border-occasio-blue ring-2 ring-occasio-blue/20" :
+                            "bg-white border-slate-200"
+                          }`}>
+                            {isPassou && <CheckCircle2 className="h-3.5 w-3.5" />}
+                          </span>
+
+                          {/* Conteúdo Textual */}
+                          <div className={isFuturo ? "opacity-45" : ""}>
+                            <h4 className={`text-xs font-bold leading-none ${isAtivo ? "text-occasio-blue text-sm font-extrabold" : "text-slate-700"}`}>
+                              {item.label}
+                            </h4>
+                            {isAtivo && (
+                              <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                {item.desc}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : imovel ? (
+            /* ======================== FORMULÁRIO DE CADASTRO DE CHAMADO ======================== */
+            <Card className="border-slate-200 shadow-md bg-white">
+              <CardHeader className="bg-slate-50 border-b border-slate-200">
+                <CardTitle className="text-base font-extrabold text-occasio-navy flex items-center gap-2">
+                  <Wrench className="h-5 w-5 text-occasio-blue" /> Solicitar Manutenção
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Descreva o problema no imóvel para que possamos enviar um técnico parceiro.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Título do Chamado (O que aconteceu?) *
+                    </label>
+                    <Input
+                      placeholder="Ex: Vazamento sob a pia da cozinha"
+                      value={titulo}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitulo(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Categoria da Ocorrência *
+                    </label>
+                    <select
+                      value={categoria}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCategoria(e.target.value)}
+                      required
+                      className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+                    >
+                      <option value="">Selecione a Categoria...</option>
+                      <option value="Hidráulica">Hidráulica (Vazamento, Cano quebrado)</option>
+                      <option value="Elétrica">Elétrica (Curto-circuito, Chuveiro, Tomadas)</option>
+                      <option value="Alvenaria">Alvenaria/Estrutura (Rachaduras, Infiltrações)</option>
+                      <option value="Pintura">Pintura e Acabamento</option>
+                      <option value="Serralheria">Serralheria e Portas/Janelas</option>
+                      <option value="Outros">Outros Reparos</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Descrição Detalhada do Problema *
+                    </label>
+                    <textarea
+                      rows={4}
+                      placeholder="Descreva detalhadamente o problema. Ex: O cano de entrada de água sob a pia está gotejando muito quando a torneira é aberta, alagando o gabinete."
+                      value={descricao}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescricao(e.target.value)}
+                      required
+                      className="w-full border border-slate-200 rounded-md p-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Melhores Dias e Horários para Atendimento *
+                    </label>
+                    <Input
+                      placeholder="Ex: Seg a Sex das 14h às 18h"
+                      value={disponibilidade}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisponibilidade(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Foto do Problema (Upload com Compressão Automática)
+                    </label>
+                    <div className="mt-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-lg p-6 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                      {imagemPreview ? (
+                        <div className="relative w-full flex flex-col items-center">
+                          <img src={imagemPreview} alt="Preview do Problema" className="max-h-40 rounded shadow-md object-contain mb-3" />
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            type="button"
+                            onClick={() => { setImagem(null); setImagemPreview(null) }}
+                            className="text-xs text-red-600 border-red-200 hover:bg-red-50"
+                          >
+                            Remover Foto
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 text-center flex flex-col items-center">
+                          <Camera className="h-8 w-8 text-slate-400" />
+                          <div className="flex text-xs text-slate-500">
+                            <label className="relative cursor-pointer bg-white rounded-md font-semibold text-occasio-blue hover:text-occasio-navy focus-within:outline-none">
+                              <span>Tirar Foto / Selecionar Arquivo</span>
+                              <input 
+                                ref={fileInputRef} 
+                                type="file" 
+                                accept="image/*" 
+                                onChange={handleImageChange} 
+                                className="sr-only" 
+                              />
+                            </label>
+                          </div>
+                          <p className="text-[10px] text-slate-400">Fotos de até 10MB serão comprimidas nativamente para 2MB.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Button 
+                    disabled={salvando} 
+                    type="submit" 
+                    className="w-full bg-occasio-blue hover:bg-occasio-navy text-white text-xs font-semibold h-10 shadow-md"
+                  >
+                    {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Registrar Chamado
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          ) : (
+            /* Aviso de cadastro sem imóvel */
+            <Card className="border-slate-200 border-dashed bg-slate-100/50 shadow-none py-16 px-6 text-center text-slate-400">
+              <div className="flex flex-col items-center justify-center gap-3">
+                <AlertTriangle className="h-12 w-12 text-amber-500" />
+                <div className="text-sm font-semibold text-slate-600">Aguardando Vinculação do Imóvel</div>
+                <p className="max-w-xs mx-auto text-xs text-slate-400 leading-relaxed">
+                  O seu perfil de inquilino ainda não possui nenhum imóvel ativo associado. Por favor, entre em contato com sua Imobiliária para que eles cadastrem e vinculem o imóvel ao seu perfil.
+                </p>
+              </div>
+            </Card>
+          )}
+        </>
       )}
 
       {/* Histórico Simplificado de Chamados Resolvidos */}
