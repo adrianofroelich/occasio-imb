@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, Hammer, AlertCircle,
-  User, UserCheck, FileText, Coins, TrendingUp
+  User, UserCheck, FileText, Coins, TrendingUp, Calendar
 } from "lucide-react"
 
 // Tipagens locais
@@ -247,7 +247,7 @@ export default function PrestadorDashboard() {
           .from("chamados")
           .select(`
             *,
-            imovel:imovel_id (codigo_imovel, endereco, bairro),
+            imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (nome)),
             inquilino:inquilino_id (nome),
             chamados_midias:chamados_midias (*)
           `)
@@ -269,7 +269,7 @@ export default function PrestadorDashboard() {
           .from("chamados")
           .select(`
             *,
-            imovel:imovel_id (codigo_imovel, endereco, bairro),
+            imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (nome)),
             inquilino:inquilino_id (nome),
             orcamentos (
               id,
@@ -346,7 +346,7 @@ export default function PrestadorDashboard() {
           .from("chamados")
           .select(`
             *,
-            imovel:imovel_id (codigo_imovel, endereco, bairro),
+            imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (nome)),
             inquilino:inquilino_id (nome),
             tecnico:tecnico_id (id, nome),
             orcamentos (
@@ -376,7 +376,7 @@ export default function PrestadorDashboard() {
           .from("chamados")
           .select(`
             *,
-            imovel:imovel_id (codigo_imovel, endereco, bairro),
+            imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (nome)),
             inquilino:inquilino_id (nome),
             tecnico:tecnico_id (id, nome),
             orcamentos (
@@ -916,9 +916,16 @@ export default function PrestadorDashboard() {
                       <CardContent className="p-4 space-y-3 text-xs">
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                              {chamado.imovel?.codigo_imovel || "Sem Código"}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                                {chamado.imovel?.codigo_imovel || "Sem Código"}
+                              </span>
+                              {chamado.imovel?.imobiliaria?.nome && (
+                                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold text-[9px] border border-blue-100">
+                                  {chamado.imovel.imobiliaria.nome}
+                                </span>
+                              )}
+                            </div>
                             <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
                           </div>
                           
@@ -1177,6 +1184,17 @@ export default function PrestadorDashboard() {
               </CardHeader>
               <CardContent className="p-4">
                 <form onSubmit={handleDelegarChamado} className="space-y-4">
+                  {/* Bloco de Destaque do Horário para Atendimento */}
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2.5 text-amber-900 shadow-sm">
+                    <Calendar className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="block font-bold text-[10px] uppercase tracking-wider text-amber-800">Dia/Horário para Atendimento (Inquilino)</span>
+                      <strong className="text-xs font-black leading-tight block mt-1">
+                        {chamadoDelegando.disponibilidade_atendimento || "Não informado"}
+                      </strong>
+                    </div>
+                  </div>
+
                   <div className="p-3 bg-slate-50 rounded border text-xs text-slate-600 mb-2 space-y-2">
                     <div>
                       <strong>Descrição do Problema:</strong>
@@ -1429,9 +1447,16 @@ export default function PrestadorDashboard() {
                             <CardContent className="p-4 space-y-3 text-xs">
                               <div className="flex justify-between items-start">
                                 <div>
-                                  <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                                    {chamado.imovel?.codigo_imovel || "Sem Código"}
-                                  </span>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                                      {chamado.imovel?.codigo_imovel || "Sem Código"}
+                                    </span>
+                                    {chamado.imovel?.imobiliaria?.nome && (
+                                      <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold text-[9px] border border-blue-100">
+                                        {chamado.imovel.imobiliaria.nome}
+                                      </span>
+                                    )}
+                                  </div>
                                   <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
                                 </div>
                                 <Badge className={`${
@@ -1513,9 +1538,16 @@ export default function PrestadorDashboard() {
                                 <CardContent className="p-4 space-y-3 text-xs">
                                   <div className="flex justify-between items-start">
                                     <div>
-                                      <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                                        {chamado.imovel?.codigo_imovel || "Sem Código"}
-                                      </span>
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                                          {chamado.imovel?.codigo_imovel || "Sem Código"}
+                                        </span>
+                                        {chamado.imovel?.imobiliaria?.nome && (
+                                          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold text-[9px] border border-blue-100">
+                                            {chamado.imovel.imobiliaria.nome}
+                                          </span>
+                                        )}
+                                      </div>
                                       <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
                                     </div>
                                     <Badge className="bg-teal-50 text-teal-800 border-teal-200 border text-[9px] font-bold uppercase">
@@ -1577,9 +1609,16 @@ export default function PrestadorDashboard() {
                                 <CardContent className="p-4 space-y-3 text-xs">
                                   <div className="flex justify-between items-start">
                                     <div>
-                                      <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                                        {chamado.imovel?.codigo_imovel || "Sem Código"}
-                                      </span>
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                                          {chamado.imovel?.codigo_imovel || "Sem Código"}
+                                        </span>
+                                        {chamado.imovel?.imobiliaria?.nome && (
+                                          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold text-[9px] border border-blue-100">
+                                            {chamado.imovel.imobiliaria.nome}
+                                          </span>
+                                        )}
+                                      </div>
                                       <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
                                     </div>
                                     <Badge className="bg-orange-50 text-orange-800 border-orange-200 border text-[9px] font-bold uppercase">
@@ -1899,9 +1938,16 @@ export default function PrestadorDashboard() {
                       <CardContent className="p-4 space-y-3 text-xs">
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                              {chamado.imovel?.codigo_imovel || "Sem Código"}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                                {chamado.imovel?.codigo_imovel || "Sem Código"}
+                              </span>
+                              {chamado.imovel?.imobiliaria?.nome && (
+                                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold text-[9px] border border-blue-100">
+                                  {chamado.imovel.imobiliaria.nome}
+                                </span>
+                              )}
+                            </div>
                             <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
                           </div>
                           <Badge className={`${statusColor} border text-[9px] font-bold uppercase`}>
@@ -2112,9 +2158,16 @@ export default function PrestadorDashboard() {
                       <CardContent className="p-4 space-y-3 text-xs">
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
-                              {chamado.imovel?.codigo_imovel || "Sem Código"}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                                {chamado.imovel?.codigo_imovel || "Sem Código"}
+                              </span>
+                              {chamado.imovel?.imobiliaria?.nome && (
+                                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold text-[9px] border border-blue-100">
+                                  {chamado.imovel.imobiliaria.nome}
+                                </span>
+                              )}
+                            </div>
                             <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
                           </div>
                           <Badge className={`${statusColor} border text-[9px] font-bold uppercase`}>

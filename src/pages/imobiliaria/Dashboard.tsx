@@ -1206,6 +1206,15 @@ export default function Dashboard() {
                           </span>
                         </div>
                       )}
+
+                      {chamado.empresa_prestadora?.nome && (
+                        <div className="flex items-center gap-1.5 text-slate-500 bg-slate-50 p-1.5 rounded border border-slate-100 mt-1">
+                          <Hammer className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span>
+                            Prestador PJ: <strong className="text-slate-700 font-semibold">{chamado.empresa_prestadora.nome}</strong>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
