@@ -172,14 +172,19 @@ function formatarData(data: Date | null): string {
 export default function PrestadorDashboard() {
   const { user, perfil } = useAuth()
   
-  // Abas do PWA (orcamentos, os, financeiro)
-  const [activeTab, setActiveTab] = useState<"orcamentos" | "os" | "financeiro">("orcamentos")
+  // Abas do PWA (orcamentos, os, concluidas, financeiro)
+  const [activeTab, setActiveTab] = useState<string>("orcamentos")
   
   // Dados das listas
   const [chamadosPendentes, setChamadosPendentes] = useState<Chamado[]>([])
   const [osAtivas, setOsAtivas] = useState<Chamado[]>([])
+  const [osConcluidas, setOsConcluidas] = useState<Chamado[]>([])
   const [financeiroChamados, setFinanceiroChamados] = useState<Chamado[]>([])
   const [empresaMae, setEmpresaMae] = useState<any | null>(null)
+
+  // Filtros para OS's Concluídas
+  const [filtroMes, setFiltroMes] = useState<string>("")
+  const [filtroCategoria, setFiltroCategoria] = useState<string>("")
   
   // Lista de técnicos da equipe (Empresa PJ)
   const [tecnicosDisponiveis, setTecnicosDisponiveis] = useState<{ id: string; nome: string }[]>([])
@@ -442,6 +447,12 @@ export default function PrestadorDashboard() {
           c.orcamentos && c.orcamentos.some((o: any) => o.homologado_pela_empresa)
         )
         setFinanceiroChamados(chamadosComOrcamento as unknown as Chamado[])
+
+        // Filtra concluídos (servico_concluido ou encerrado) para Empresa PJ
+        const concluidos = (finData || []).filter((c: any) => 
+          c.status === 'servico_concluido' || c.status === 'encerrado'
+        )
+        setOsConcluidas(concluidos as unknown as Chamado[])
       }
 
     } catch (err: any) {
@@ -835,7 +846,7 @@ export default function PrestadorDashboard() {
       )}
 
       {/* Abas PWA */}
-      <div className="grid grid-cols-3 gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6">
+      <div className={`grid ${ehTecnico ? "grid-cols-3" : "grid-cols-4"} gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6`}>
         <button
           onClick={() => { 
             setActiveTab("orcamentos")
@@ -844,7 +855,7 @@ export default function PrestadorDashboard() {
             setChamadoDelegando(null)
             setChamadoHomologando(null)
           }}
-          className={`py-2 text-xs font-bold rounded-md transition-all ${
+          className={`py-2 text-[11px] md:text-xs font-bold rounded-md transition-all ${
             activeTab === "orcamentos" 
               ? "bg-white text-occasio-navy shadow-sm" 
               : "text-slate-500 hover:text-slate-800"
@@ -860,7 +871,7 @@ export default function PrestadorDashboard() {
             setChamadoDelegando(null)
             setChamadoHomologando(null)
           }}
-          className={`py-2 text-xs font-bold rounded-md transition-all ${
+          className={`py-2 text-[11px] md:text-xs font-bold rounded-md transition-all ${
             activeTab === "os" 
               ? "bg-white text-occasio-navy shadow-sm" 
               : "text-slate-500 hover:text-slate-800"
@@ -868,6 +879,24 @@ export default function PrestadorDashboard() {
         >
           OS Ativas ({osAtivas.length})
         </button>
+        {!ehTecnico && (
+          <button
+            onClick={() => { 
+              setActiveTab("concluidas")
+              setChamadoCotando(null)
+              setChamadoConcluindo(null)
+              setChamadoDelegando(null)
+              setChamadoHomologando(null)
+            }}
+            className={`py-2 text-[11px] md:text-xs font-bold rounded-md transition-all ${
+              activeTab === "concluidas" 
+                ? "bg-white text-occasio-navy shadow-sm" 
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            OS's Concluídas ({osConcluidas.length})
+          </button>
+        )}
         <button
           onClick={() => { 
             setActiveTab("financeiro")
@@ -876,7 +905,7 @@ export default function PrestadorDashboard() {
             setChamadoDelegando(null)
             setChamadoHomologando(null)
           }}
-          className={`py-2 text-xs font-bold rounded-md transition-all ${
+          className={`py-2 text-[11px] md:text-xs font-bold rounded-md transition-all ${
             activeTab === "financeiro" 
               ? "bg-white text-occasio-navy shadow-sm" 
               : "text-slate-500 hover:text-slate-800"
@@ -1777,6 +1806,160 @@ export default function PrestadorDashboard() {
           )}
         </>
       )}
+
+      {/* ======================== ABA: OS CONCLUÍDAS (PJ) ======================== */}
+      {activeTab === "concluidas" && !ehTecnico && (() => {
+        // Gera as opções de meses dinamicamente
+        const mesesDisponiveis = Array.from(new Set(osConcluidas.map(c => {
+          const d = new Date(c.criado_em)
+          const ano = d.getFullYear()
+          const mes = String(d.getMonth() + 1).padStart(2, '0')
+          return `${ano}-${mes}`
+        }))).sort().reverse()
+
+        // Gera as opções de categorias dinamicamente
+        const categoriasDisponiveis = Array.from(new Set(osConcluidas.map(c => c.categoria))).filter(Boolean)
+
+        // Formata mes/ano
+        const formatarMesAno = (mesAnoStr: string) => {
+          const [ano, mes] = mesAnoStr.split("-")
+          const meses = [
+            "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+            "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+          ]
+          const idx = parseInt(mes) - 1
+          return `${meses[idx]}/${ano}`
+        }
+
+        // Filtra chamados concluídos
+        const chamadosFiltrados = osConcluidas.filter(c => {
+          if (filtroCategoria && c.categoria !== filtroCategoria) return false
+          if (filtroMes) {
+            const d = new Date(c.criado_em)
+            const ano = d.getFullYear()
+            const mes = String(d.getMonth() + 1).padStart(2, '0')
+            const mesAno = `${ano}-${mes}`
+            if (mesAno !== filtroMes) return false
+          }
+          return true
+        })
+
+        return (
+          <div className="space-y-4">
+            {/* Barra de Filtros */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center gap-3 text-xs">
+              <div className="flex flex-col gap-1 min-w-[120px]">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Filtrar por Categoria</label>
+                <select
+                  value={filtroCategoria}
+                  onChange={(e) => setFiltroCategoria(e.target.value)}
+                  className="border border-slate-200 rounded px-2 py-1 bg-white text-xs focus:outline-none"
+                >
+                  <option value="">Todas as categorias</option>
+                  {categoriasDisponiveis.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-[120px]">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Filtrar por Mês</label>
+                <select
+                  value={filtroMes}
+                  onChange={(e) => setFiltroMes(e.target.value)}
+                  className="border border-slate-200 rounded px-2 py-1 bg-white text-xs focus:outline-none"
+                >
+                  <option value="">Todos os meses</option>
+                  {mesesDisponiveis.map(m => (
+                    <option key={m} value={m}>{formatarMesAno(m)}</option>
+                  ))}
+                </select>
+              </div>
+
+              {(filtroCategoria || filtroMes) && (
+                <Button 
+                  onClick={() => {
+                    setFiltroCategoria("")
+                    setFiltroMes("")
+                  }}
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 mt-4 h-7"
+                >
+                  Limpar Filtros
+                </Button>
+              )}
+            </div>
+
+            {/* Listagem */}
+            {chamadosFiltrados.length === 0 ? (
+              <div className="text-center py-16 text-slate-400 bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center gap-3">
+                <HelpCircle className="h-10 w-10 text-slate-300" />
+                <div className="font-semibold text-slate-500">Nenhum chamado concluído</div>
+                <p className="max-w-xs mx-auto text-[11px] text-slate-400">
+                  Não encontramos OS's concluídas com os filtros selecionados.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {chamadosFiltrados.map((chamado) => (
+                  <Card key={chamado.id} className="border-slate-200 shadow-sm bg-white hover:shadow-md transition-all">
+                    <CardContent className="p-4 space-y-3 text-xs">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold text-[9px]">
+                              {chamado.imovel?.codigo_imovel || "Sem Código"}
+                            </span>
+                            {chamado.imovel?.imobiliaria?.nome && (
+                              <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold text-[9px] border border-blue-100">
+                                {chamado.imovel.imobiliaria.nome}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="font-extrabold text-occasio-navy text-sm mt-1">{chamado.titulo}</h3>
+                        </div>
+                        
+                        <Badge className={`${
+                          chamado.status === 'servico_concluido' 
+                            ? "bg-green-50 text-green-800 border-green-200" 
+                            : "bg-blue-50 text-blue-800 border-blue-200"
+                        } border text-[9px] font-bold uppercase`}>
+                          {chamado.status === 'servico_concluido' ? "Serviço Concluído" : "OS Encerrada"}
+                        </Badge>
+                      </div>
+
+                      <p className="text-slate-500 line-clamp-2 leading-relaxed">{chamado.descricao_problema}</p>
+
+                      <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
+                        <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})</div>
+                        <div><strong>Técnico Responsável:</strong> <strong className="text-slate-800">{chamado.tecnico?.nome || "Não informado"}</strong></div>
+                        {chamado.data_conclusao && (
+                          <div><strong>Concluído em:</strong> {new Date(chamado.data_conclusao).toLocaleDateString('pt-BR')}</div>
+                        )}
+                      </div>
+
+                      {/* Detalhes Financeiros Homologados */}
+                      {(() => {
+                        const orc = chamado.orcamentos?.find(o => o.homologado_pela_empresa)
+                        if (!orc) return null
+                        const total = orc.valor_servico_r$ + orc.valor_materiais_r$
+                        return (
+                          <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-500">
+                            <span>Mão de Obra: <strong>R$ {orc.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></span>
+                            <span>Materiais: <strong>R$ {orc.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></span>
+                            <span className="text-occasio-blue font-bold">Total: R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )
+                      })()}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ======================== ABA 3: PAINEL FINANCEIRO (PJ) ======================== */}
       {activeTab === "financeiro" && !ehTecnico && (() => {
