@@ -84,6 +84,17 @@ O sistema conta com um motor financeiro de repasse de valores para Prestadoras (
 
 ---
 
+## 📱 Suporte a Proprietários Não-Tecnológicos (Fluxo Híbrido / WhatsApp)
+
+Nem todos os proprietários de imóveis acessam ou desejam acessar o painel digital do Occasio.Imob. Para garantir a fluidez operacional das imobiliárias, implementamos o **Fluxo Híbrido**:
+
+1. **Flag de Preferência no Perfil (`aceita_painel_digital`):** No cadastro do cliente Proprietário, a imobiliária define se ele utilizará o painel digital. Se marcado como "Não", um aviso visual discreto é exibido na listagem de clientes.
+2. **Compartilhamento via WhatsApp:** No painel da imobiliária, o operador conta com o botão **"Enviar para Proprietário via WhatsApp"**. Ao clicar, o sistema gera dinamicamente uma mensagem premium formatada com o código do imóvel, resumo do problema, custos (se houver orçamento) e um link amigável.
+3. **Página de Impressão e PDF (`/chamado/print/:id`):** Rota pública otimizada que apresenta um "PDF visual" do chamado, com layout profissional *print-friendly* (ocultando barras de ferramentas e cabeçalhos ao imprimir), permitindo que a imobiliária salve como PDF ou envie o link direto.
+4. **Bypass de Aprovação Externa:** Se o proprietário estiver configurado como analógico, o operador da imobiliária terá acesso ao botão **"Aprovar em nome do Proprietário (Autorização Externa)"** na etapa de análise de orçamentos, destravando a O.S. e gravando a auditoria no histórico do chamado.
+
+---
+
 ## 📁 Estrutura de Pastas (Mapa do Projeto)
 
 ```bash

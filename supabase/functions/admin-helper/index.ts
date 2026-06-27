@@ -20,7 +20,8 @@ export default {
         const { 
           email, password, nome, perfil, telefone, documento, 
           empresa_mae_id, categorias, creci, cep, endereco, 
-          bairro, cidade, estado, tipo_repasse, prazo_repasse_dias
+          bairro, cidade, estado, tipo_repasse, prazo_repasse_dias,
+          aceita_painel_digital
         } = body;
 
         const { data, error } = await ctx.supabaseAdmin.auth.admin.createUser({
@@ -42,7 +43,8 @@ export default {
             cidade: cidade || null,
             estado: estado || null,
             tipo_repasse: tipo_repasse || null,
-            prazo_repasse_dias: prazo_repasse_dias || null
+            prazo_repasse_dias: prazo_repasse_dias || null,
+            aceita_painel_digital: aceita_painel_digital !== undefined ? aceita_painel_digital : true
           }
         });
 
@@ -101,7 +103,7 @@ export default {
         const { 
           userId, email, nome, perfil, telefone, documento, 
           creci, cep, endereco, bairro, cidade, estado,
-          tipo_repasse, prazo_repasse_dias
+          tipo_repasse, prazo_repasse_dias, aceita_painel_digital
         } = body;
 
         const updateData: any = {};
@@ -124,7 +126,8 @@ export default {
               cidade: cidade || null,
               estado: estado || null,
               tipo_repasse: tipo_repasse || null,
-              prazo_repasse_dias: prazo_repasse_dias || null
+              prazo_repasse_dias: prazo_repasse_dias || null,
+              aceita_painel_digital: aceita_painel_digital !== undefined ? aceita_painel_digital : undefined
             }
           }
         );
@@ -153,6 +156,7 @@ export default {
             estado: estado || null,
             tipo_repasse: tipo_repasse || null,
             prazo_repasse_dias: prazo_repasse_dias || null,
+            aceita_painel_digital: aceita_painel_digital !== undefined ? aceita_painel_digital : undefined,
             atualizado_em: new Date().toISOString()
           })
           .eq("id", userId);

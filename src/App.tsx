@@ -16,6 +16,7 @@ import PrestadorDashboard from "./pages/prestador/Dashboard"
 import ProprietarioDashboard from "./pages/proprietario/Dashboard"
 import AdminDashboard from "./pages/admin/Dashboard"
 import PrestadorEquipe from "./pages/prestador/Equipe"
+import ChamadoPrint from "./pages/ChamadoPrint"
 
 // Componente auxiliar para tratar rolagem suave de âncoras (hash)
 // e garantir que a página role para o topo ao alternar de rota
@@ -68,6 +69,7 @@ function MainLayout() {
   const navigate = useNavigate()
   const isHome = location.pathname === "/"
   const isLogin = location.pathname === "/login" || location.pathname === "/login-teste"
+  const isPrintPage = location.pathname.startsWith("/chamado/print/")
   const { user, perfil, signOut } = useAuth()
 
   // Ação de clique na logo (rola para o topo se já estiver na home, senão vai para a home)
@@ -77,6 +79,18 @@ function MainLayout() {
     } else {
       navigate("/")
     }
+  }
+
+  if (isPrintPage) {
+    return (
+      <div className="min-h-screen bg-white font-sans selection:bg-occasio-blue selection:text-white flex flex-col">
+        <main className="flex-grow">
+          <Routes>
+            <Route path="/chamado/print/:id" element={<ChamadoPrint />} />
+          </Routes>
+        </main>
+      </div>
+    )
   }
 
   return (

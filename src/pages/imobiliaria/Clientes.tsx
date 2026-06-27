@@ -30,6 +30,7 @@ interface ClienteExibicao {
   documento_identificacao: string | null
   primeiro_acesso_pendente: boolean
   criado_em: string
+  aceita_painel_digital?: boolean
 }
 
 export default function Clientes() {
@@ -45,6 +46,7 @@ export default function Clientes() {
   const [telefone, setTelefone] = useState("")
   const [documento, setDocumento] = useState("")
   const [tipoPerfil, setTipoPerfil] = useState<"inquilino" | "proprietario">("inquilino")
+  const [aceitaPainelDigital, setAceitaPainelDigital] = useState(true)
   const [errorMsg, setErrorMsg] = useState("")
   const [successMsg, setSuccessMsg] = useState("")
 
@@ -59,7 +61,7 @@ export default function Clientes() {
       setLoading(true)
       const { data, error } = await supabase
         .from("perfis")
-        .select("id, nome, email, telefone, perfil, documento_identificacao, primeiro_acesso_pendente, criado_em")
+        .select("id, nome, email, telefone, perfil, documento_identificacao, primeiro_acesso_pendente, criado_em, aceita_painel_digital")
         .in("perfil", ["inquilino", "proprietario"])
         .order("criado_em", { ascending: false })
 
@@ -147,7 +149,8 @@ export default function Clientes() {
             nome: nome.trim(),
             perfil: tipoPerfil,
             telefone: telefone.replace(/\D/g, "") ? telefone : null,
-            documento: documento.replace(/\D/g, "") ? documento : null
+            documento: documento.replace(/\D/g, "") ? documento : null,
+            aceita_painel_digital: tipoPerfil === "proprietario" ? aceitaPainelDigital : true
           }
         })
 
@@ -171,7 +174,8 @@ export default function Clientes() {
             nome: nome.trim(),
             perfil: tipoPerfil,
             telefone: telefone.replace(/\D/g, "") ? telefone : null,
-            documento: documento.replace(/\D/g, "") ? documento : null
+            documento: documento.replace(/\D/g, "") ? documento : null,
+            aceita_painel_digital: tipoPerfil === "proprietario" ? aceitaPainelDigital : true
           }
         })
 
@@ -193,6 +197,7 @@ export default function Clientes() {
       setTelefone("")
       setDocumento("")
       setTipoPerfil("inquilino")
+      setAceitaPainelDigital(true)
 
       // Atualiza a lista
       carregarClientes()
@@ -214,6 +219,7 @@ export default function Clientes() {
     setTelefone(cliente.telefone ? aplicarMascaraTelefone(cliente.telefone) : "")
     setDocumento(cliente.documento_identificacao ? aplicarMascaraCpfCnpj(cliente.documento_identificacao) : "")
     setTipoPerfil(cliente.perfil)
+    setAceitaPainelDigital(cliente.aceita_painel_digital ?? true)
   }
 
   // Cancela o modo de edição
@@ -224,6 +230,7 @@ export default function Clientes() {
     setTelefone("")
     setDocumento("")
     setTipoPerfil("inquilino")
+    setAceitaPainelDigital(true)
     setErrorMsg("")
     setSuccessMsg("")
   }
@@ -432,6 +439,27 @@ export default function Clientes() {
                   </div>
                 </div>
 
+                {tipoPerfil === "proprietario" && (
+                  <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/60 rounded-lg mt-2 animate-fade-in">
+                    <div className="space-y-0.5">
+                      <label htmlFor="aceita_painel_digital" className="text-xs font-semibold text-slate-700 block cursor-pointer">
+                        Este proprietário utilizará o painel digital?
+                      </label>
+                      <span className="text-[10px] text-slate-400 block leading-tight">
+                        Se desmarcado, a aprovação dependerá de contato externo (WhatsApp/Telefone).
+                      </span>
+                    </div>
+                    <input
+                      id="aceita_painel_digital"
+                      type="checkbox"
+                      checked={aceitaPainelDigital}
+                      onChange={(e) => setAceitaPainelDigital(e.target.checked)}
+                      disabled={saving}
+                      className="h-4.5 w-4.5 rounded border-slate-300 text-occasio-blue focus:ring-occasio-blue cursor-pointer"
+                    />
+                  </div>
+                )}
+
                 <div className="flex gap-2 pt-4">
                   {clienteEditando && (
                     <Button
@@ -590,6 +618,11 @@ export default function Clientes() {
                             >
                               {cliente.perfil === "inquilino" ? "Inquilino" : "Proprietário"}
                             </Badge>
+                            {cliente.perfil === "proprietario" && cliente.aceita_painel_digital === false && (
+                              <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded mt-1.5 font-semibold inline-block whitespace-nowrap">
+                                Aprovação via WhatsApp/Contato Externo
+                              </div>
+                            )}
                           </td>
                           <td className="py-4 px-6">
                             {cliente.primeiro_acesso_pendente ? (

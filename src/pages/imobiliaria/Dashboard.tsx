@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Wrench, ShieldAlert, Clock, CheckSquare, RefreshCw, Filter, 
   AlertCircle, FileText, User, HelpCircle, Loader2, Hammer, CheckCircle2, Plus,
-  Calendar, UserCheck
+  Calendar, UserCheck, MessageSquare, Printer
 } from "lucide-react"
 
 // Interfaces de tipos mapeados
@@ -48,6 +48,7 @@ interface Chamado {
     proprietario?: {
       nome: string
       telefone?: string | null
+      aceita_painel_digital?: boolean
     } | null
   }
   inquilino: {
@@ -484,7 +485,7 @@ export default function Dashboard() {
             estado,
             cep,
             limite_alcada_r$,
-            proprietario:proprietario_id (nome, telefone)
+            proprietario:proprietario_id (nome, telefone, aceita_painel_digital)
           ),
           inquilino:inquilino_id (nome, telefone),
           empresa_prestadora:empresa_prestadora_id (id, nome, tipo_repasse, prazo_repasse_dias),
@@ -649,6 +650,99 @@ export default function Dashboard() {
     } finally {
       setSalvandoAcao(false)
     }
+  }
+
+  // Aprova o orçamento em nome do proprietário (Autorização Externa)
+  const handleAprovarEmNomeDoProprietario = async () => {
+    if (!chamadoAtivo || !orcamentoAtivo) return
+    setSalvandoAcao(true)
+    setErro(null)
+
+    try {
+      // 1. Atualiza o orçamento como aprovado pelo proprietário
+      const { error: orcamentoError } = await supabase
+        .from("orcamentos")
+        .update({ aprovado_pelo_proprietario: true })
+        .eq("id", orcamentoAtivo.id)
+
+      if (orcamentoError) throw orcamentoError
+
+      // 2. Atualiza o chamado para aguardando_autorizacao
+      const { error: chamadoError } = await supabase
+        .from("chamados")
+        .update({ status: "aguardando_autorizacao" })
+        .eq("id", chamadoAtivo.id)
+
+      if (chamadoError) throw chamadoError
+
+      // 3. Registra a ação no histórico
+      const { error: historicoError } = await supabase
+        .from("historico_chamados")
+        .insert({
+          chamado_id: chamadoAtivo.id,
+          usuario_id: user?.id,
+          status_anterior: chamadoAtivo.status,
+          novo_status: "aguardando_autorizacao",
+          observacao: `Orçamento de R$ ${Number(orcamentoAtivo.valor_total_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} aprovado em nome do Proprietário (Autorização Externa via WhatsApp/Telefone).`
+        })
+
+      if (historicoError) throw historicoError
+
+      setChamadoAtivo(null)
+      await loadChamados()
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro ao aprovar em nome do proprietário.")
+    } finally {
+      setSalvandoAcao(false)
+    }
+  }
+
+  // Gera e envia resumo do chamado/orçamento via WhatsApp
+  const handleCompartilharWhatsApp = () => {
+    if (!chamadoAtivo) return
+
+    const proprietario = chamadoAtivo.imovel.proprietario
+    const nomeProprietario = proprietario?.nome || "Proprietário"
+    const telefoneProprietario = proprietario?.telefone ? proprietario.telefone.replace(/\D/g, "") : ""
+    const codigoImovel = chamadoAtivo.imovel.codigo_imovel
+    const tituloChamado = chamadoAtivo.titulo
+    const descricao = chamadoAtivo.descricao_problema
+
+    const printLink = `${window.location.origin}/chamado/print/${chamadoAtivo.id}`
+
+    let mensagem = ""
+
+    if (orcamentoAtivo && orcamentoAtivo.valor_total_r$) {
+      // Pedido de aprovação de valores (orçamento homologado/recebido)
+      const valorTotal = Number(orcamentoAtivo.valor_total_r$).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+      const valorServico = Number(orcamentoAtivo.valor_servico_r$).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+      const valorMateriais = Number(orcamentoAtivo.valor_materiais_r$).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+
+      mensagem = `Olá, *${nomeProprietario}*!\n\n` +
+        `Temos um orçamento pronto para a solicitação de manutenção do seu imóvel (*${codigoImovel}*):\n\n` +
+        `- *Chamado*: ${tituloChamado}\n` +
+        `- *Descrição*: ${descricao}\n` +
+        `- *Mão de Obra*: ${valorServico}\n` +
+        `- *Materiais*: ${valorMateriais}\n` +
+        `- *Valor Total*: ${valorTotal}\n\n` +
+        `Para visualizar os detalhes completos ou aprovar o serviço, acesse o link:\n${printLink}\n\n` +
+        `Ficamos no aguardo de sua resposta. Obrigado!`
+    } else {
+      // Notificação inicial (OS aberta)
+      mensagem = `Olá, *${nomeProprietario}*!\n\n` +
+        `Gostaríamos de informar que foi aberta uma solicitação de manutenção para o seu imóvel (*${codigoImovel}*):\n\n` +
+        `- *Chamado*: ${tituloChamado}\n` +
+        `- *Descrição*: ${descricao}\n\n` +
+        `Você pode acompanhar os detalhes e o andamento por este link:\n${printLink}\n\n` +
+        `Qualquer dúvida, estamos à disposição!`
+    }
+
+    const ddi = telefoneProprietario ? (telefoneProprietario.startsWith("55") ? "" : "55") : ""
+    const foneCompleto = telefoneProprietario ? `${ddi}${telefoneProprietario}` : ""
+    const url = `https://api.whatsapp.com/send?phone=${foneCompleto}&text=${encodeURIComponent(mensagem)}`
+    
+    window.open(url, "_blank")
   }
 
   // Autoriza a execução técnica final da OS (status aguardando_autorizacao)
@@ -1317,6 +1411,35 @@ export default function Dashboard() {
                       )}
                     </div>
                   </div>
+                ) : chamadoAtivo.status === "analise_proprietario" && orcamentoAtivo ? (
+                  <div className="space-y-4 pt-1">
+                    <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 p-3 rounded text-xs space-y-1.5 animate-fade-in">
+                      <div className="font-bold flex items-center gap-1">
+                        <Clock className="h-4 w-4 text-indigo-600" />
+                        Em Análise pelo Proprietário
+                      </div>
+                      <p className="text-[11px] leading-relaxed">
+                        O orçamento de <strong>R$ {Number(orcamentoAtivo.valor_total_r$).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong> está sob análise do proprietário <strong>{chamadoAtivo.imovel.proprietario?.nome}</strong>.
+                      </p>
+                      {chamadoAtivo.imovel.proprietario?.aceita_painel_digital === false && (
+                        <div className="bg-rose-100/80 border border-rose-200 text-rose-800 p-2.5 rounded text-[11px] font-semibold mt-2">
+                          ⚠️ Proprietário Analógico: A aprovação deve ser realizada de forma externa (via telefone/WhatsApp).
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Exibe o botão de aprovação externa se o proprietário for analógico */}
+                    {chamadoAtivo.imovel.proprietario?.aceita_painel_digital === false && (
+                      <Button
+                        type="button"
+                        disabled={salvandoAcao}
+                        onClick={handleAprovarEmNomeDoProprietario}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-bold h-10 flex items-center gap-1.5 justify-center shadow"
+                      >
+                        {salvandoAcao ? "Aprovando..." : <>Aprovar em nome do Proprietário (Autorização Externa)</>}
+                      </Button>
+                    )}
+                  </div>
                 ) : chamadoAtivo.status === "aguardando_autorizacao" ? (
                   <div className="space-y-4 pt-1">
                     <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded text-xs space-y-1.5">
@@ -1524,6 +1647,30 @@ export default function Dashboard() {
                     </Button>
                   </form>
                 )}
+
+                {/* Compartilhamento com Proprietário */}
+                <div className="border-t border-slate-100 pt-4 mt-4 space-y-2">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Comunicação com o Proprietário
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      onClick={handleCompartilharWhatsApp}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold h-9 flex items-center gap-1.5 justify-center shadow"
+                    >
+                      <MessageSquare className="h-4 w-4" /> Enviar via WhatsApp
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => window.open(`/chamado/print/${chamadoAtivo.id}`, '_blank')}
+                      className="border-slate-200 text-slate-700 hover:bg-slate-50 text-[11px] font-bold h-9 flex items-center gap-1.5 justify-center"
+                    >
+                      <Printer className="h-4 w-4" /> Ver Impressão / PDF
+                    </Button>
+                  </div>
+                </div>
 
                 {/* Exibição de Fotos Vistoria Técnica com Zoom */}
                 {midias.length > 0 && (
