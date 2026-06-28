@@ -1246,13 +1246,26 @@ export default function PrestadorDashboard() {
 
                         <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
                           {ehTecnico ? (
-                            <Button 
-                              onClick={() => setChamadoCotando(chamado)} 
-                              size="sm" 
-                              className="bg-occasio-blue hover:bg-occasio-navy text-white text-[10px] px-3 h-7 font-bold"
-                            >
-                              Enviar Orçamento
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button 
+                                onClick={() => {
+                                  setChamadoDevolvendo(chamado)
+                                  setJustificativaDevolucao("")
+                                  setErro(null)
+                                }} 
+                                variant="outline"
+                                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-bold h-7 text-[10px] px-3"
+                              >
+                                Devolver OS
+                              </Button>
+                              <Button 
+                                onClick={() => setChamadoCotando(chamado)} 
+                                size="sm" 
+                                className="bg-occasio-blue hover:bg-occasio-navy text-white text-[10px] px-3 h-7 font-bold"
+                              >
+                                Enviar Orçamento
+                              </Button>
+                            </div>
                           ) : !chamado.tecnico_id ? (
                             <Button 
                               onClick={() => {
