@@ -190,6 +190,18 @@ A partir da versão 1.4.0, o Occasio.Imob oferece suporte completo à personaliz
    - **Cabeçalho das Dashboards:** No topo dos painéis da Imobiliária e da Prestadora PJ ao lado do nome da empresa.
    - **Relatórios de Impressão (PDF):** Cabeçalho timbrado dinâmico profissional em preto e branco ou colorido nas telas `/chamado/print/:id` (ChamadoPrint), `/financeiro/recibo-tecnico/` (ReciboTecnicoPrint) e no modal de laudo técnico (`LaudoTecnico.tsx`).
 
+
+## 📷 Evidências Visuais e Upload de Imagens com Compressão
+
+A partir da versão 1.5.0, o Occasio.Imob conta com suporte a anexo de evidências visuais (até 3 imagens) para documentar o problema e comprovar a resolução dos chamados:
+
+1. **Upload nos Formulários de Abertura (Inquilino e Imobiliária):** Permite anexar até 3 fotos de evidência do problema. Os formatos aceitos são `.png`, `.jpg`, `.jpeg`.
+2. **Upload no Formulário de Conclusão (Técnico):** O técnico de campo pode anexar até 3 fotos comprovando a resolução da O.S. ao finalizar o serviço.
+3. **Compressão Canvas Inteligente (Frontend):** Se qualquer imagem passar do limite de 2 MB, o utilitário nativo (`comprimirImagemChamado` em `src/lib/compressor.ts`) realiza o redimensionamento dinâmico automático limitando a resolução máxima a 1200px e comprimindo para JPEG com 75% de qualidade.
+4. **Bucket de Storage Público (`chamados`):** As imagens de problemas são salvas em `/chamado_id/problema/` e as de solução em `/chamado_id/solucao/`. O array de URLs das fotos é salvo diretamente nas colunas `imagens_problema` e `imagens_solucao` na tabela `public.chamados`.
+5. **Exibição Dinâmica e Lightbox:** Nos painéis da Imobiliária e da Prestadora PJ, as evidências são exibidas como uma galeria elegante de miniaturas clicáveis que abrem em um visualizador (lightbox/modal) com zoom.
+6. **Impressão e PDF de Prestação de Contas:** As fotos de "Antes" e "Depois" são injetadas perfeitamente no rodapé das telas de impressão (`ChamadoPrint.tsx` e no modal/PDF de `LaudoTecnico.tsx`), prontas para exportação em PDF.
+
 ---
 
 ## 💻 Desenvolvimento Local

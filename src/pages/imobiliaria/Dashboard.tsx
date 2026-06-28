@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { comprimirImagem } from "@/lib/compressor"
+import { comprimirImagemChamado } from "@/lib/compressor"
 import VisualizadorImagem from "@/components/VisualizadorImagem"
 import LaudoTecnico from "@/components/LaudoTecnico"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Wrench, ShieldAlert, Clock, CheckSquare, RefreshCw, Filter, 
   AlertCircle, FileText, User, HelpCircle, Loader2, Hammer, CheckCircle2, Plus,
-  Calendar, UserCheck, MessageSquare, Printer
+  Calendar, UserCheck, MessageSquare, Printer, X
 } from "lucide-react"
 
 // Interfaces de tipos mapeados
@@ -33,6 +33,8 @@ interface Chamado {
   responsabilidade: Responsabilidade
   criado_em: string
   data_conclusao?: string | null
+  imagens_problema?: string[] | null
+  imagens_solucao?: string[] | null
   imovel_id: string
   inquilino_id: string
   empresa_prestadora_id?: string | null
@@ -222,8 +224,8 @@ export default function Dashboard() {
   const [novoChamadoCategoria, setNovoChamadoCategoria] = useState("")
   const [novoChamadoDescricao, setNovoChamadoDescricao] = useState("")
   const [novoChamadoDisponibilidade, setNovoChamadoDisponibilidade] = useState("")
-  const [novoChamadoImagem, setNovoChamadoImagem] = useState<File | null>(null)
-  const [novoChamadoImagemPreview, setNovoChamadoImagemPreview] = useState<string | null>(null)
+  const [novoChamadoImagens, setNovoChamadoImagens] = useState<File[]>([])
+  const [novoChamadoImagensPreview, setNovoChamadoImagensPreview] = useState<string[]>([])
   const [salvandoNovoChamado, setSalvandoNovoChamado] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -365,18 +367,50 @@ export default function Dashboard() {
   }
 
   const handleNovoChamadoImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const arquivo = e.target.files?.[0]
-    if (!arquivo) return
+    const arquivos = e.target.files
+    if (!arquivos || arquivos.length === 0) return
+
+    const arrayArquivos = Array.from(arquivos)
+
+    if (novoChamadoImagens.length + arrayArquivos.length > 3) {
+      setErro("Erro: Limite estrito de até 3 imagens por chamado.")
+      return
+    }
+
+    const formatosValidos = ["image/png", "image/jpeg", "image/jpg"]
+    for (const arq of arrayArquivos) {
+      const extensao = arq.name.toLowerCase().split('.').pop() || ''
+      const tipo = arq.type.toLowerCase()
+      if (!formatosValidos.includes(tipo) && !["png", "jpg", "jpeg"].includes(extensao)) {
+        setErro("Apenas formatos .png, .jpg e .jpeg são aceitos.")
+        return
+      }
+    }
 
     try {
-      const arquivoComprimido = await comprimirImagem(arquivo)
-      
-      setNovoChamadoImagem(arquivoComprimido)
-      const previewUrl = URL.createObjectURL(arquivoComprimido)
-      setNovoChamadoImagemPreview(previewUrl)
+      const arquivosComprimidos: File[] = []
+      const previews: string[] = []
+
+      for (const arq of arrayArquivos) {
+        // Roda compressor preventivo via Canvas se exceder o limite de 2MB
+        const comprimido = await comprimirImagemChamado(arq)
+        arquivosComprimidos.push(comprimido)
+        previews.push(URL.createObjectURL(comprimido))
+      }
+
+      setNovoChamadoImagens(prev => [...prev, ...arquivosComprimidos])
+      setNovoChamadoImagensPreview(prev => [...prev, ...previews])
     } catch (err) {
       console.error("Erro ao comprimir imagem:", err)
     }
+  }
+
+  const removerNovoChamadoImagem = (index: number) => {
+    setNovoChamadoImagens(prev => prev.filter((_, i) => i !== index))
+    setNovoChamadoImagensPreview(prev => {
+      URL.revokeObjectURL(prev[index])
+      return prev.filter((_, i) => i !== index)
+    })
   }
 
   const handleSalvarNovoChamado = async (e: React.FormEvent) => {
@@ -432,31 +466,34 @@ export default function Dashboard() {
         observacao: "Chamado aberto administrativamente pela imobiliária."
       })
 
-      // 3. Upload de mídia se selecionada
-      if (novoChamadoImagem) {
-        const extensao = novoChamadoImagem.type.split("/")[1] || "jpg"
-        const caminho = `chamados/${chamadoCriado.id}_antes.${extensao}`
+      // 3. Upload de mídias se selecionadas
+      const urlsImagens: string[] = []
+      if (novoChamadoImagens.length > 0) {
+        for (let i = 0; i < novoChamadoImagens.length; i++) {
+          const img = novoChamadoImagens[i]
+          const extensao = img.type.split("/")[1] || "jpg"
+          const caminho = `${chamadoCriado.id}/problema/img_${i}_${Date.now()}.${extensao}`
 
-        const { error: uploadError } = await supabase.storage
-          .from("chamados-midias")
-          .upload(caminho, novoChamadoImagem)
+          const { error: uploadError } = await supabase.storage
+            .from("chamados")
+            .upload(caminho, img)
 
-        if (uploadError) throw uploadError
+          if (uploadError) throw uploadError
 
-        const { data: urlData } = supabase.storage
-          .from("chamados-midias")
-          .getPublicUrl(caminho)
+          const { data: urlData } = supabase.storage
+            .from("chamados")
+            .getPublicUrl(caminho)
 
-        const { error: midiaError } = await supabase
-          .from("chamados_midias")
-          .insert({
-            chamado_id: chamadoCriado.id,
-            usuario_id: user?.id,
-            url_storage: urlData.publicUrl,
-            tipo_midia: "antes"
-          })
+          urlsImagens.push(urlData.publicUrl)
+        }
 
-        if (midiaError) throw midiaError
+        // Salva o array de URLs na coluna imagens_problema
+        const { error: updateError } = await supabase
+          .from("chamados")
+          .update({ imagens_problema: urlsImagens })
+          .eq("id", chamadoCriado.id)
+
+        if (updateError) throw updateError
       }
 
       setNovoChamadoImovelId("")
@@ -467,8 +504,8 @@ export default function Dashboard() {
       setNovoChamadoCategoria("")
       setNovoChamadoDescricao("")
       setNovoChamadoDisponibilidade("")
-      setNovoChamadoImagem(null)
-      setNovoChamadoImagemPreview(null)
+      setNovoChamadoImagens([])
+      setNovoChamadoImagensPreview([])
       setFormChamadoAberto(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
 
@@ -1325,18 +1362,38 @@ export default function Dashboard() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">Foto do Problema (Antes)</label>
-                  <div className="flex gap-4 items-center">
-                    <Input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleNovoChamadoImageChange}
-                      className="border-slate-200 text-xs"
-                    />
-                    {novoChamadoImagemPreview && (
-                      <div className="relative h-10 w-10 border rounded overflow-hidden shrink-0">
-                        <img src={novoChamadoImagemPreview} alt="Preview" className="h-full w-full object-cover" />
+                  <label className="text-xs font-semibold text-slate-700">Fotos do Problema (Upload de até 3 fotos)</label>
+                  <div className="border border-dashed border-slate-200 rounded-lg p-4 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                    {novoChamadoImagensPreview.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2 w-full mb-3">
+                        {novoChamadoImagensPreview.map((preview, index) => (
+                          <div key={index} className="relative border rounded-md overflow-hidden aspect-square bg-slate-100">
+                            <img src={preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removerNovoChamadoImagem(index)}
+                              className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {novoChamadoImagensPreview.length < 3 && (
+                      <div className="space-y-1 text-center flex flex-col items-center">
+                        <label className="relative cursor-pointer bg-white rounded-md font-semibold text-occasio-blue hover:text-occasio-navy text-xs">
+                          <span>Adicionar Foto ({novoChamadoImagensPreview.length}/3)</span>
+                          <input 
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/png, image/jpeg, image/jpg"
+                            onChange={handleNovoChamadoImageChange}
+                            className="sr-only"
+                            multiple
+                          />
+                        </label>
+                        <p className="text-[10px] text-slate-400">Formatos aceitos: .png, .jpg, .jpeg. Se exceder 2MB, será comprimido.</p>
                       </div>
                     )}
                   </div>
@@ -1973,30 +2030,86 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Exibição de Fotos Vistoria Técnica com Zoom */}
-                {midias.length > 0 && (
-                  <div className="pt-4 border-t border-slate-100 mt-4">
-                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                      Fotos de Vistoria
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {midias.map((midia) => (
-                        <div 
-                          key={midia.id} 
-                          onClick={() => setUrlImagemZoom(midia.url_storage)}
-                          className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
-                        >
-                          <img 
-                            src={midia.url_storage} 
-                            alt={`Foto ${midia.tipo_midia}`}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                          />
-                          <div className="absolute inset-x-0 bottom-0 bg-black/60 text-[9px] text-white py-0.5 px-1 font-semibold text-center capitalize">
-                            {midia.tipo_midia}
-                          </div>
+                {/* Exibição de Fotos Vistoria Técnica com Zoom (Galeria Antes e Depois) */}
+                {((chamadoAtivo.imagens_problema && chamadoAtivo.imagens_problema.length > 0) || 
+                  (chamadoAtivo.imagens_solucao && chamadoAtivo.imagens_solucao.length > 0) || 
+                  midias.length > 0) && (
+                  <div className="pt-4 border-t border-slate-100 mt-4 space-y-4">
+                    {/* Fotos do Problema */}
+                    {((chamadoAtivo.imagens_problema && chamadoAtivo.imagens_problema.length > 0) || midias.some(m => m.tipo_midia === 'antes')) && (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                          Fotos do Problema (Antes)
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {chamadoAtivo.imagens_problema?.map((url, idx) => (
+                            <div 
+                              key={idx} 
+                              onClick={() => setUrlImagemZoom(url)}
+                              className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                            >
+                              <img 
+                                src={url} 
+                                alt={`Problema ${idx + 1}`}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                            </div>
+                          ))}
+                          {/* Legacy "antes" midias */}
+                          {midias.filter(m => m.tipo_midia === 'antes' && (!chamadoAtivo.imagens_problema || !chamadoAtivo.imagens_problema.includes(m.url_storage))).map((midia) => (
+                            <div 
+                              key={midia.id} 
+                              onClick={() => setUrlImagemZoom(midia.url_storage)}
+                              className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                            >
+                              <img 
+                                src={midia.url_storage} 
+                                alt="Problema legado"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    )}
+
+                    {/* Fotos da Solução */}
+                    {((chamadoAtivo.imagens_solucao && chamadoAtivo.imagens_solucao.length > 0) || midias.some(m => m.tipo_midia === 'depois')) && (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                          Fotos da Solução (Depois)
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {chamadoAtivo.imagens_solucao?.map((url, idx) => (
+                            <div 
+                              key={idx} 
+                              onClick={() => setUrlImagemZoom(url)}
+                              className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                            >
+                              <img 
+                                src={url} 
+                                alt={`Solução ${idx + 1}`}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                            </div>
+                          ))}
+                          {/* Legacy "depois" midias */}
+                          {midias.filter(m => m.tipo_midia === 'depois' && (!chamadoAtivo.imagens_solucao || !chamadoAtivo.imagens_solucao.includes(m.url_storage))).map((midia) => (
+                            <div 
+                              key={midia.id} 
+                              onClick={() => setUrlImagemZoom(midia.url_storage)}
+                              className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                            >
+                              <img 
+                                src={midia.url_storage} 
+                                alt="Solução legada"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>

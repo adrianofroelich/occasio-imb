@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { 
   Printer, ArrowLeft, Loader2, AlertCircle, Wrench, 
-  User, Calendar, FileText, Hammer, Clock
+  User, Calendar, FileText, Hammer, Clock, Camera
 } from "lucide-react"
 
 // Interface dos detalhes consumidos via RPC get_chamado_public_details
@@ -35,6 +35,8 @@ interface PublicChamadoDetails {
     nome: string
     telefone: string | null
   }
+  imagens_problema: string[] | null
+  imagens_solucao: string[] | null
   imobiliaria?: {
     nome: string
     logo_url: string | null
@@ -384,6 +386,50 @@ export default function ChamadoPrint() {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Evidências Visuais (Problema e Solução) no Rodapé para Impressão */}
+      {((chamado.imagens_problema && chamado.imagens_problema.length > 0) || 
+        (chamado.imagens_solucao && chamado.imagens_solucao.length > 0)) && (
+        <div className="mt-8 border border-slate-200 rounded-xl p-5 print-card page-break-inside-avoid">
+          <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2 mb-4">
+            <Camera className="h-4 w-4 text-occasio-blue" />
+            Evidências Visuais do Chamado
+          </h3>
+          <div className="grid grid-cols-2 gap-6">
+            {/* Bloco Antes */}
+            {chamado.imagens_problema && chamado.imagens_problema.length > 0 && (
+              <div>
+                <span className="block text-center text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-100 py-1 rounded mb-2 uppercase">
+                  Antes (Problema Relatado)
+                </span>
+                <div className="grid grid-cols-3 gap-2">
+                  {chamado.imagens_problema.map((url, idx) => (
+                    <div key={idx} className="relative aspect-video rounded overflow-hidden border border-slate-200 bg-slate-50">
+                      <img src={url} alt={`Problema ${idx + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Bloco Depois */}
+            {chamado.imagens_solucao && chamado.imagens_solucao.length > 0 && (
+              <div>
+                <span className="block text-center text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 py-1 rounded mb-2 uppercase">
+                  Depois (Solução Comprovada)
+                </span>
+                <div className="grid grid-cols-3 gap-2">
+                  {chamado.imagens_solucao.map((url, idx) => (
+                    <div key={idx} className="relative aspect-video rounded overflow-hidden border border-slate-200 bg-slate-50">
+                      <img src={url} alt={`Solução ${idx + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

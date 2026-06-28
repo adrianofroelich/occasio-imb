@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
-import { comprimirImagem } from "@/lib/compressor"
+import { comprimirImagemChamado } from "@/lib/compressor"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, Hammer, AlertCircle,
-  User, UserCheck, FileText, Coins, TrendingUp, Calendar, Plus, Printer, MapPin
+  User, UserCheck, FileText, Coins, TrendingUp, Calendar, Plus, Printer, MapPin, X
 } from "lucide-react"
 
 // Tipagens locais
@@ -71,6 +71,8 @@ interface Chamado {
   fechamento_tecnico_id?: string | null
   devolvido_anteriormente?: boolean
   ultima_devolucao_justificativa?: string | null
+  imagens_problema?: string[] | null
+  imagens_solucao?: string[] | null
 }
 
 // Funções auxiliares para formatação de moeda brasileira (pt-BR)
@@ -240,12 +242,75 @@ export default function PrestadorDashboard() {
   // Técnico: Formulário de Conclusão de OS
   const [chamadoConcluindo, setChamadoConcluindo] = useState<Chamado | null>(null)
   const [relatorio, setRelatorio] = useState("")
-  const [imagemDepois, setImagemDepois] = useState<File | null>(null)
-  const [imagemPreview, setImagemPreview] = useState<string | null>(null)
+  const [imagensDepois, setImagensDepois] = useState<File[]>([])
+  const [imagensPreview, setImagensPreview] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Estado para ampliar foto do problema / visualização de mídia
   const [imagemZoom, setImagemZoom] = useState<string | null>(null)
+
+  // Helper para renderizar evidências do chamado de forma consolidada e categorizada
+  const renderFotosChamado = (c: Chamado) => {
+    const temProblema = (c.imagens_problema && c.imagens_problema.length > 0) || (c.chamados_midias && c.chamados_midias.some(m => m.tipo_midia === 'antes'));
+    const temSolucao = (c.imagens_solucao && c.imagens_solucao.length > 0) || (c.chamados_midias && c.chamados_midias.some(m => m.tipo_midia === 'depois'));
+
+    if (!temProblema && !temSolucao) return null;
+
+    return (
+      <div className="mt-2 space-y-2 border-t border-slate-100 pt-2 text-left">
+        {temProblema && (
+          <div>
+            <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Evidências do Problema:</span>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {c.imagens_problema?.map((url, idx) => (
+                <img 
+                  key={`prob-${idx}`} 
+                  src={url} 
+                  alt="Foto do Problema" 
+                  onClick={() => setImagemZoom(url)}
+                  className="h-12 w-12 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                />
+              ))}
+              {c.chamados_midias?.filter(m => m.tipo_midia === 'antes' && (!c.imagens_problema || !c.imagens_problema.includes(m.url_storage))).map(midia => (
+                <img 
+                  key={midia.id} 
+                  src={midia.url_storage} 
+                  alt="Foto do Problema" 
+                  onClick={() => setImagemZoom(midia.url_storage)}
+                  className="h-12 w-12 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        {temSolucao && (
+          <div>
+            <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Evidências da Solução:</span>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {c.imagens_solucao?.map((url, idx) => (
+                <img 
+                  key={`sol-${idx}`} 
+                  src={url} 
+                  alt="Foto da Solução" 
+                  onClick={() => setImagemZoom(url)}
+                  className="h-12 w-12 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                />
+              ))}
+              {c.chamados_midias?.filter(m => m.tipo_midia === 'depois' && (!c.imagens_solucao || !c.imagens_solucao.includes(m.url_storage))).map(midia => (
+                <img 
+                  key={midia.id} 
+                  src={midia.url_storage} 
+                  alt="Foto da Solução" 
+                  onClick={() => setImagemZoom(midia.url_storage)}
+                  className="h-12 w-12 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Verifica se é perfil de Técnico (pertence a uma Empresa Mãe) ou Empresa PJ (é conta-mãe)
   const ehTecnico = !!perfil?.empresa_mae_id
@@ -880,19 +945,53 @@ export default function PrestadorDashboard() {
     }
   }
 
-  // Técnico: Trata seleção de imagem da conclusão e roda o compressor Canvas
+  // Técnico: Trata seleção de imagem da conclusão e roda o compressor Canvas com limite de 3
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const arquivo = e.target.files?.[0]
-    if (!arquivo) return
+    const arquivos = e.target.files
+    if (!arquivos || arquivos.length === 0) return
+
+    const arrayArquivos = Array.from(arquivos)
+
+    if (imagensDepois.length + arrayArquivos.length > 3) {
+      setErro("Erro: Limite estrito de até 3 imagens por conclusão.")
+      return
+    }
+
+    const formatosValidos = ["image/png", "image/jpeg", "image/jpg"]
+    for (const arq of arrayArquivos) {
+      const extensao = arq.name.toLowerCase().split('.').pop() || ''
+      const tipo = arq.type.toLowerCase()
+      if (!formatosValidos.includes(tipo) && !["png", "jpg", "jpeg"].includes(extensao)) {
+        setErro("Apenas formatos .png, .jpg e .jpeg são aceitos.")
+        return
+      }
+    }
 
     try {
-      const arquivoComprimido = await comprimirImagem(arquivo)
-      setImagemDepois(arquivoComprimido)
-      setImagemPreview(URL.createObjectURL(arquivoComprimido))
+      const arquivosComprimidos: File[] = []
+      const previews: string[] = []
+
+      for (const arq of arrayArquivos) {
+        // Compressor preventivo via Canvas se passar de 2MB (max 1200px)
+        const comprimido = await comprimirImagemChamado(arq)
+        arquivosComprimidos.push(comprimido)
+        previews.push(URL.createObjectURL(comprimido))
+      }
+
+      setImagensDepois(prev => [...prev, ...arquivosComprimidos])
+      setImagensPreview(prev => [...prev, ...previews])
     } catch (err: any) {
       console.error(err)
       setErro("Erro ao processar imagem final do serviço.")
     }
+  }
+
+  const removerImagemDepois = (index: number) => {
+    setImagensDepois(prev => prev.filter((_, i) => i !== index))
+    setImagensPreview(prev => {
+      URL.revokeObjectURL(prev[index])
+      return prev.filter((_, i) => i !== index)
+    })
   }
 
   // Técnico: Envia a conclusão de serviço (em_execucao -> servico_concluido)
@@ -903,42 +1002,43 @@ export default function PrestadorDashboard() {
     setErro(null)
     setSucesso(null)
 
-    if (!relatorio || !imagemDepois) {
-      setErro("É necessário preencher o relatório final e anexar a foto da conclusão do serviço.")
+    if (!relatorio || imagensDepois.length === 0) {
+      setErro("É necessário preencher o relatório final e anexar pelo menos 1 foto da conclusão do serviço (máx 3).")
       setSalvando(false)
       return
     }
 
     try {
-      // 1. Upload da imagem comprimida "depois" para o Storage
-      const extensao = imagemDepois.type.split("/")[1] || "jpg"
-      const caminho = `chamados/${chamadoConcluindo.id}_depois.${extensao}`
+      // 1. Upload das imagens comprimidas "depois" para o Storage
+      const urlsImagens: string[] = []
+      for (let i = 0; i < imagensDepois.length; i++) {
+        const img = imagensDepois[i]
+        const extensao = img.type.split("/")[1] || "jpg"
+        const caminho = `${chamadoConcluindo.id}/solucao/img_${i}_${Date.now()}.${extensao}`
 
-      const { error: uploadError } = await supabase.storage
-        .from("chamados-midias")
-        .upload(caminho, imagemDepois)
+        const { error: uploadError } = await supabase.storage
+          .from("chamados")
+          .upload(caminho, img)
 
-      if (uploadError) throw uploadError
+        if (uploadError) throw uploadError
 
-      // Busca URL pública do arquivo enviado
-      const { data: urlData } = supabase.storage
-        .from("chamados-midias")
-        .getPublicUrl(caminho)
+        // Busca URL pública do arquivo enviado
+        const { data: urlData } = supabase.storage
+          .from("chamados")
+          .getPublicUrl(caminho)
 
-      // 2. Salva na tabela chamados_midias
-      const { error: midiaError } = await supabase
-        .from("chamados_midias")
-        .insert({
-          chamado_id: chamadoConcluindo.id,
-          usuario_id: user?.id,
-          url_storage: urlData.publicUrl,
-          tipo_midia: "depois"
-        })
+        urlsImagens.push(urlData.publicUrl)
+      }
 
-      if (midiaError) throw midiaError
+      // Salva o array de URLs na coluna imagens_solucao
+      const { error: updateChamadoImgError } = await supabase
+        .from("chamados")
+        .update({ imagens_solucao: urlsImagens })
+        .eq("id", chamadoConcluindo.id)
 
-      // 3. Atualiza o orçamento correspondente com o relatório técnico de conclusão
-      // Puxamos o orçamento associado a esse chamado para atualizar
+      if (updateChamadoImgError) throw updateChamadoImgError
+
+      // 2. Atualiza o orçamento correspondente com o relatório técnico de conclusão
       const { error: orcamentoError } = await supabase
         .from("orcamentos")
         .update({
@@ -949,7 +1049,7 @@ export default function PrestadorDashboard() {
 
       if (orcamentoError) throw orcamentoError
 
-      // 4. Atualiza status do chamado para 'servico_concluido'
+      // 3. Atualiza status do chamado para 'servico_concluido'
       const { error: chamadoError } = await supabase
         .from("chamados")
         .update({ status: "servico_concluido" })
@@ -957,20 +1057,20 @@ export default function PrestadorDashboard() {
 
       if (chamadoError) throw chamadoError
 
-      // 5. Histórico
+      // 4. Histórico
       await supabase.from("historico_chamados").insert({
         chamado_id: chamadoConcluindo.id,
         usuario_id: user?.id,
         status_anterior: "em_execucao" as StatusChamado,
         novo_status: "servico_concluido" as StatusChamado,
-        observacao: `Execução finalizada pelo técnico ${perfil?.nome}. Relatório e foto comprobatória enviados.`
+        observacao: `Execução finalizada pelo técnico ${perfil?.nome}. Relatório e fotos comprobatórias enviados.`
       })
 
       setSucesso("Serviço concluído com sucesso! Aguardando homologação da imobiliária.")
       setChamadoConcluindo(null)
       setRelatorio("")
-      setImagemDepois(null)
-      setImagemPreview(null)
+      setImagensDepois([])
+      setImagensPreview([])
       if (fileInputRef.current) fileInputRef.current.value = ""
 
       await loadPrestadorData()
@@ -1208,25 +1308,7 @@ export default function PrestadorDashboard() {
 
                         <p className="text-slate-500 line-clamp-2 leading-relaxed">{chamado.descricao_problema}</p>
                         
-                        {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
-                        {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
-                          <div className="mt-1">
-                            <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
-                            <div className="flex gap-2 overflow-x-auto pb-1">
-                              {chamado.chamados_midias
-                                .filter(m => m.tipo_midia === 'antes')
-                                .map(midia => (
-                                  <img 
-                                    key={midia.id} 
-                                    src={midia.url_storage} 
-                                    alt="Foto do Problema" 
-                                    onClick={() => setImagemZoom(midia.url_storage)}
-                                    className="h-14 w-14 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
-                                  />
-                                ))}
-                            </div>
-                          </div>
-                        )}
+                        {renderFotosChamado(chamado)}
                         
                         {((!ehTecnico && chamado.tecnico) || (!ehTecnico && jaEnviouProposta)) && (
                           <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded border border-slate-100 text-[11px] text-slate-600">
@@ -1320,25 +1402,7 @@ export default function PrestadorDashboard() {
                     <strong>Descrição do Problema:</strong>
                     <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoCotando.descricao_problema}</p>
                     
-                    {/* Foto do problema se houver */}
-                    {chamadoCotando.chamados_midias && chamadoCotando.chamados_midias.some(m => m.tipo_midia === 'antes') && (
-                      <div className="mt-3">
-                        <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
-                        <div className="flex gap-2 overflow-x-auto pb-1">
-                          {chamadoCotando.chamados_midias
-                            .filter(m => m.tipo_midia === 'antes')
-                            .map(midia => (
-                              <img 
-                                key={midia.id} 
-                                src={midia.url_storage} 
-                                alt="Foto do Problema" 
-                                onClick={() => setImagemZoom(midia.url_storage)}
-                                className="h-16 w-16 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
-                              />
-                            ))}
-                        </div>
-                      </div>
-                    )}
+                    {renderFotosChamado(chamadoCotando)}
                     
                     <div className="mt-3 bg-amber-50 border border-amber-200 rounded-md p-3 text-amber-900">
                       <span className="block text-[10px] font-bold text-amber-800 uppercase tracking-wide mb-0.5">
@@ -1473,25 +1537,7 @@ export default function PrestadorDashboard() {
                       <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoDelegando.descricao_problema}</p>
                     </div>
 
-                    {/* Foto do problema se houver */}
-                    {chamadoDelegando.chamados_midias && chamadoDelegando.chamados_midias.some(m => m.tipo_midia === 'antes') && (
-                      <div>
-                        <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
-                        <div className="flex gap-2 overflow-x-auto pb-1">
-                          {chamadoDelegando.chamados_midias
-                            .filter(m => m.tipo_midia === 'antes')
-                            .map(midia => (
-                              <img 
-                                key={midia.id} 
-                                src={midia.url_storage} 
-                                alt="Foto do Problema" 
-                                onClick={() => setImagemZoom(midia.url_storage)}
-                                className="h-16 w-16 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
-                              />
-                            ))}
-                        </div>
-                      </div>
-                    )}
+                    {renderFotosChamado(chamadoDelegando)}
 
                     <div>
                       <strong>Localização &amp; Horário:</strong>
@@ -1561,25 +1607,7 @@ export default function PrestadorDashboard() {
                       <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoHomologando.descricao_problema}</p>
                     </div>
 
-                    {/* Foto do problema se houver */}
-                    {chamadoHomologando.chamados_midias && chamadoHomologando.chamados_midias.some(m => m.tipo_midia === 'antes') && (
-                      <div>
-                        <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
-                        <div className="flex gap-2 overflow-x-auto pb-1">
-                          {chamadoHomologando.chamados_midias
-                            .filter(m => m.tipo_midia === 'antes')
-                            .map(midia => (
-                              <img 
-                                key={midia.id} 
-                                src={midia.url_storage} 
-                                alt="Foto do Problema" 
-                                onClick={() => setImagemZoom(midia.url_storage)}
-                                className="h-16 w-16 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
-                              />
-                            ))}
-                        </div>
-                      </div>
-                    )}
+                    {renderFotosChamado(chamadoHomologando)}
 
                     <div className="text-[11px] leading-relaxed pt-2 border-t border-slate-200">
                       <strong>Dados Originais do Técnico:</strong><br/>
@@ -1766,25 +1794,7 @@ export default function PrestadorDashboard() {
                                 <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
                               </div>
 
-                              {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
-                              {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
-                                <div className="mt-2">
-                                  <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
-                                  <div className="flex gap-2 overflow-x-auto pb-1">
-                                    {chamado.chamados_midias
-                                      .filter(m => m.tipo_midia === 'antes')
-                                      .map(midia => (
-                                        <img 
-                                          key={midia.id} 
-                                          src={midia.url_storage} 
-                                          alt="Foto do Problema" 
-                                          onClick={() => setImagemZoom(midia.url_storage)}
-                                          className="h-14 w-14 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
-                                        />
-                                      ))}
-                                  </div>
-                                </div>
-                              )}
+                              {renderFotosChamado(chamado)}
 
                               <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
                                 <Button 
@@ -1916,25 +1926,7 @@ export default function PrestadorDashboard() {
                                     </div>
                                   )}
 
-                                  {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
-                                  {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
-                                    <div className="mt-2">
-                                      <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
-                                      <div className="flex gap-2 overflow-x-auto pb-1">
-                                        {chamado.chamados_midias
-                                          .filter(m => m.tipo_midia === 'antes')
-                                          .map(midia => (
-                                            <img 
-                                              key={midia.id} 
-                                              src={midia.url_storage} 
-                                              alt="Foto do Problema" 
-                                              onClick={() => setImagemZoom(midia.url_storage)}
-                                              className="h-14 w-14 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
-                                            />
-                                          ))}
-                                      </div>
-                                    </div>
-                                  )}
+                                  {renderFotosChamado(chamado)}
 
                                   {!chamado.tecnico_id ? (
                                     <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5 mt-2">
@@ -2038,25 +2030,7 @@ export default function PrestadorDashboard() {
                                     )}
                                   </div>
 
-                                  {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
-                                  {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
-                                    <div className="mt-2">
-                                      <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema:</span>
-                                      <div className="flex gap-2 overflow-x-auto pb-1">
-                                        {chamado.chamados_midias
-                                          .filter(m => m.tipo_midia === 'antes')
-                                          .map(midia => (
-                                            <img 
-                                              key={midia.id} 
-                                              src={midia.url_storage} 
-                                              alt="Foto do Problema" 
-                                              onClick={() => setImagemZoom(midia.url_storage)}
-                                              className="h-14 w-14 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
-                                            />
-                                          ))}
-                                      </div>
-                                    </div>
-                                  )}
+                                  {renderFotosChamado(chamado)}
 
                                   <div className="bg-orange-50/50 border border-orange-100 text-orange-800 text-[10px] p-2 rounded font-semibold mt-1">
                                     O Técnico {chamado.tecnico?.nome || "designado"} iniciou a execução do serviço no local neste momento.
@@ -2089,25 +2063,7 @@ export default function PrestadorDashboard() {
                       <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoConcluindo.descricao_problema}</p>
                     </div>
                     
-                    {/* Foto do problema se houver */}
-                    {chamadoConcluindo.chamados_midias && chamadoConcluindo.chamados_midias.some(m => m.tipo_midia === 'antes') && (
-                      <div>
-                        <span className="block font-bold text-[9px] text-slate-400 uppercase mb-1">Foto do Problema (Antes):</span>
-                        <div className="flex gap-2 overflow-x-auto pb-1">
-                          {chamadoConcluindo.chamados_midias
-                            .filter(m => m.tipo_midia === 'antes')
-                            .map(midia => (
-                              <img 
-                                key={midia.id} 
-                                src={midia.url_storage} 
-                                alt="Foto do Problema Antes" 
-                                onClick={() => setImagemZoom(midia.url_storage)}
-                                className="h-16 w-16 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity border border-slate-200"
-                              />
-                            ))}
-                        </div>
-                      </div>
-                    )}
+                    {renderFotosChamado(chamadoConcluindo)}
                   </div>
 
                   <div>
@@ -2126,39 +2082,43 @@ export default function PrestadorDashboard() {
 
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      Foto do Serviço Concluído ('Depois') *
+                      Fotos do Serviço Concluído ('Depois') * (Upload de até 3 fotos)
                     </label>
-                    <div className="mt-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-lg p-5 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                      {imagemPreview ? (
-                        <div className="relative w-full flex flex-col items-center">
-                           <img src={imagemPreview} alt="Conserto finalizado" className="max-h-36 rounded shadow-md object-contain mb-2" />
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            type="button"
-                            onClick={() => { setImagemDepois(null); setImagemPreview(null) }}
-                            className="text-[10px] text-red-600 border-red-200 hover:bg-red-50 h-7"
-                          >
-                            Remover
-                          </Button>
+                    <div className="mt-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-lg p-4 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                      {imagensPreview.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2 w-full mb-3">
+                          {imagensPreview.map((preview, index) => (
+                            <div key={index} className="relative border rounded-md overflow-hidden aspect-square bg-slate-100">
+                              <img src={preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => removerImagemDepois(index)}
+                                className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition-colors"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ) : (
+                      )}
+
+                      {imagensPreview.length < 3 && (
                         <div className="space-y-2 text-center flex flex-col items-center">
                           <Camera className="h-7 w-7 text-slate-400" />
                           <div className="flex text-xs text-slate-500">
                             <label className="relative cursor-pointer bg-white rounded-md font-semibold text-occasio-blue hover:text-occasio-navy">
-                              <span>Enviar foto do 'Depois'</span>
+                              <span>Enviar foto do 'Depois' ({imagensPreview.length}/3)</span>
                               <input 
                                 ref={fileInputRef} 
                                 type="file" 
-                                accept="image/*" 
+                                accept="image/png, image/jpeg, image/jpg" 
                                 onChange={handleImageChange} 
                                 className="sr-only" 
-                                required
+                                multiple
                               />
                             </label>
                           </div>
-                          <p className="text-[9px] text-slate-400">Comprimida pelo Canvas antes do upload.</p>
+                          <p className="text-[10px] text-slate-400">Formatos aceitos: .png, .jpg, .jpeg. Se exceder 2MB, será comprimido.</p>
                         </div>
                       )}
                     </div>

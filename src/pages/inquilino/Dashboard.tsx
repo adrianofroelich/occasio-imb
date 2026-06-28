@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
-import { comprimirImagem } from "@/lib/compressor"
+import { comprimirImagemChamado } from "@/lib/compressor"
 import VisualizadorImagem from "@/components/VisualizadorImagem"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Calendar, Camera, Wrench, CheckCircle2, 
-  AlertTriangle, Loader2, RefreshCw, Landmark, History, AlertCircle, Plus
+  AlertTriangle, Loader2, RefreshCw, Landmark, History, AlertCircle, Plus, X
 } from "lucide-react"
 
 // Tipagens locais
@@ -37,6 +37,8 @@ interface Chamado {
   status: StatusChamado
   criado_em: string
   responsabilidade: string
+  imagens_problema?: string[] | null
+  imagens_solucao?: string[] | null
 }
 
 // Configuração visual dos status para a timeline
@@ -78,8 +80,8 @@ export default function InquilinoDashboard() {
   const [categoria, setCategoria] = useState("")
   const [descricao, setDescricao] = useState("")
   const [disponibilidade, setDisponibilidade] = useState("")
-  const [imagem, setImagem] = useState<File | null>(null)
-  const [imagemPreview, setImagemPreview] = useState<string | null>(null)
+  const [imagens, setImagens] = useState<File[]>([])
+  const [imagensPreview, setImagensPreview] = useState<string[]>([])
   
   // Referência do input de arquivo
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -207,24 +209,55 @@ export default function InquilinoDashboard() {
     }
   }, [user, perfil])
 
-  // Trata a seleção da imagem e executa o compressor preventivo
+  // Trata a seleção de imagem e executa o compressor preventivo com limite de 3
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const arquivo = e.target.files?.[0]
-    if (!arquivo) return
+    const arquivos = e.target.files
+    if (!arquivos || arquivos.length === 0) return
+
+    const arrayArquivos = Array.from(arquivos)
+
+    // Limite estrito de 3 imagens
+    if (imagens.length + arrayArquivos.length > 3) {
+      setErro("Erro: Limite estrito de até 3 imagens por chamado.")
+      return
+    }
+
+    // Validar formatos (.png, .jpg, .jpeg)
+    const formatosValidos = ["image/png", "image/jpeg", "image/jpg"]
+    for (const arq of arrayArquivos) {
+      const extensao = arq.name.toLowerCase().split('.').pop() || ''
+      const tipo = arq.type.toLowerCase()
+      if (!formatosValidos.includes(tipo) && !["png", "jpg", "jpeg"].includes(extensao)) {
+        setErro("Apenas formatos .png, .jpg e .jpeg são aceitos.")
+        return
+      }
+    }
 
     try {
-      // 1. Executa a compressão automática nativa via Canvas se exceder o limite
-      const arquivoComprimido = await comprimirImagem(arquivo)
-      
-      setImagem(arquivoComprimido)
-      
-      // Cria URL de preview
-      const previewUrl = URL.createObjectURL(arquivoComprimido)
-      setImagemPreview(previewUrl)
+      const arquivosComprimidos: File[] = []
+      const previews: string[] = []
+
+      for (const arq of arrayArquivos) {
+        // Roda compressor preventivo via Canvas se exceder o limite de 2MB
+        const comprimido = await comprimirImagemChamado(arq)
+        arquivosComprimidos.push(comprimido)
+        previews.push(URL.createObjectURL(comprimido))
+      }
+
+      setImagens(prev => [...prev, ...arquivosComprimidos])
+      setImagensPreview(prev => [...prev, ...previews])
     } catch (err: any) {
       console.error(err)
       setErro("Erro ao tentar processar e comprimir a imagem.")
     }
+  }
+
+  const removerImagem = (index: number) => {
+    setImagens(prev => prev.filter((_, i) => i !== index))
+    setImagensPreview(prev => {
+      URL.revokeObjectURL(prev[index])
+      return prev.filter((_, i) => i !== index)
+    })
   }
 
   // Executa o envio e abertura do chamado
@@ -272,34 +305,35 @@ export default function InquilinoDashboard() {
         observacao: "Chamado registrado no sistema pelo inquilino."
       })
 
-      // 3. Executa upload da imagem para o bucket do Storage se selecionada
-      if (imagem) {
-        // Gera um caminho único baseado no ID do chamado
-        const extensao = imagem.type.split("/")[1] || "jpg"
-        const caminho = `chamados/${chamadoCriado.id}_antes.${extensao}`
+      // 3. Executa upload das imagens comprimidas para o bucket chamados
+      const urlsImagens: string[] = []
+      if (imagens.length > 0) {
+        for (let i = 0; i < imagens.length; i++) {
+          const img = imagens[i]
+          const extensao = img.type.split("/")[1] || "jpg"
+          const caminho = `${chamadoCriado.id}/problema/img_${i}_${Date.now()}.${extensao}`
 
-        const { error: uploadError } = await supabase.storage
-          .from("chamados-midias")
-          .upload(caminho, imagem)
+          const { error: uploadError } = await supabase.storage
+            .from("chamados")
+            .upload(caminho, img)
 
-        if (uploadError) throw uploadError
+          if (uploadError) throw uploadError
 
-        // Busca URL pública do arquivo enviado
-        const { data: urlData } = supabase.storage
-          .from("chamados-midias")
-          .getPublicUrl(caminho)
+          // Busca URL pública do arquivo enviado
+          const { data: urlData } = supabase.storage
+            .from("chamados")
+            .getPublicUrl(caminho)
 
-        // Salva na tabela de mídias
-        const { error: midiaError } = await supabase
-          .from("chamados_midias")
-          .insert({
-            chamado_id: chamadoCriado.id,
-            usuario_id: user?.id,
-            url_storage: urlData.publicUrl,
-            tipo_midia: "antes"
-          })
+          urlsImagens.push(urlData.publicUrl)
+        }
 
-        if (midiaError) throw midiaError
+        // Salva o array de URLs na coluna imagens_problema
+        const { error: updateError } = await supabase
+          .from("chamados")
+          .update({ imagens_problema: urlsImagens })
+          .eq("id", chamadoCriado.id)
+
+        if (updateError) throw updateError
       }
 
       setSucesso("Chamado de manutenção aberto com sucesso!")
@@ -309,8 +343,8 @@ export default function InquilinoDashboard() {
       setCategoria("")
       setDescricao("")
       setDisponibilidade("")
-      setImagem(null)
-      setImagemPreview(null)
+      setImagens([])
+      setImagensPreview([])
       if (fileInputRef.current) fileInputRef.current.value = ""
 
       // Define a aba ativa para o novo chamado
@@ -474,27 +508,81 @@ export default function InquilinoDashboard() {
                   </div>
 
                   {/* Galeria de Fotos com Zoom */}
-                  {midias.length > 0 && (
-                    <div className="pt-4 border-t border-slate-100 mt-2">
-                      <strong className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Fotos Anexadas</strong>
-                      <div className="grid grid-cols-2 gap-2">
-                        {midias.map((midia) => (
-                          <div 
-                            key={midia.id} 
-                            onClick={() => setUrlImagemZoom(midia.url_storage)}
-                            className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
-                          >
-                            <img 
-                              src={midia.url_storage} 
-                              alt={`Foto do chamado - ${midia.tipo_midia}`}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                            />
-                            <div className="absolute inset-x-0 bottom-0 bg-black/60 text-[9px] text-white py-0.5 px-1 font-semibold text-center capitalize">
-                              Foto: {midia.tipo_midia}
-                            </div>
+                  {((chamadoAtivo.imagens_problema && chamadoAtivo.imagens_problema.length > 0) || 
+                    (chamadoAtivo.imagens_solucao && chamadoAtivo.imagens_solucao.length > 0) || 
+                    midias.length > 0) && (
+                    <div className="pt-4 border-t border-slate-100 mt-2 space-y-4">
+                      {/* Fotos do Problema */}
+                      {((chamadoAtivo.imagens_problema && chamadoAtivo.imagens_problema.length > 0) || midias.some(m => m.tipo_midia === 'antes')) && (
+                        <div>
+                          <strong className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Fotos do Problema (Antes)</strong>
+                          <div className="grid grid-cols-3 gap-2">
+                            {chamadoAtivo.imagens_problema?.map((url, idx) => (
+                              <div 
+                                key={idx} 
+                                onClick={() => setUrlImagemZoom(url)}
+                                className="relative aspect-square rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                              >
+                                <img 
+                                  src={url} 
+                                  alt={`Problema ${idx + 1}`}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                />
+                              </div>
+                            ))}
+                            {/* Legacy "antes" midias */}
+                            {midias.filter(m => m.tipo_midia === 'antes' && (!chamadoAtivo.imagens_problema || !chamadoAtivo.imagens_problema.includes(m.url_storage))).map((midia) => (
+                              <div 
+                                key={midia.id} 
+                                onClick={() => setUrlImagemZoom(midia.url_storage)}
+                                className="relative aspect-square rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                              >
+                                <img 
+                                  src={midia.url_storage} 
+                                  alt="Problema legado"
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                />
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      )}
+
+                      {/* Fotos da Solução */}
+                      {((chamadoAtivo.imagens_solucao && chamadoAtivo.imagens_solucao.length > 0) || midias.some(m => m.tipo_midia === 'depois')) && (
+                        <div>
+                          <strong className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Fotos da Solução (Depois)</strong>
+                          <div className="grid grid-cols-3 gap-2">
+                            {chamadoAtivo.imagens_solucao?.map((url, idx) => (
+                              <div 
+                                key={idx} 
+                                onClick={() => setUrlImagemZoom(url)}
+                                className="relative aspect-square rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                              >
+                                <img 
+                                  src={url} 
+                                  alt={`Solução ${idx + 1}`}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                />
+                              </div>
+                            ))}
+                            {/* Legacy "depois" midias */}
+                            {midias.filter(m => m.tipo_midia === 'depois' && (!chamadoAtivo.imagens_solucao || !chamadoAtivo.imagens_solucao.includes(m.url_storage))).map((midia) => (
+                              <div 
+                                key={midia.id} 
+                                onClick={() => setUrlImagemZoom(midia.url_storage)}
+                                className="relative aspect-square rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                              >
+                                <img 
+                                  src={midia.url_storage} 
+                                  alt="Solução legada"
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -616,38 +704,43 @@ export default function InquilinoDashboard() {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Foto do Problema (Upload com Compressão Automática)
+                      Fotos do Problema (Upload de até 3 fotos)
                     </label>
                     <div className="mt-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-lg p-6 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                      {imagemPreview ? (
-                        <div className="relative w-full flex flex-col items-center">
-                          <img src={imagemPreview} alt="Preview do Problema" className="max-h-40 rounded shadow-md object-contain mb-3" />
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            type="button"
-                            onClick={() => { setImagem(null); setImagemPreview(null) }}
-                            className="text-xs text-red-600 border-red-200 hover:bg-red-50"
-                          >
-                            Remover Foto
-                          </Button>
+                      {imagensPreview.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2 w-full mb-3">
+                          {imagensPreview.map((preview, index) => (
+                            <div key={index} className="relative border rounded-md overflow-hidden aspect-square bg-slate-100">
+                              <img src={preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => removerImagem(index)}
+                                className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition-colors"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ) : (
+                      )}
+
+                      {imagensPreview.length < 3 && (
                         <div className="space-y-2 text-center flex flex-col items-center">
                           <Camera className="h-8 w-8 text-slate-400" />
                           <div className="flex text-xs text-slate-500">
                             <label className="relative cursor-pointer bg-white rounded-md font-semibold text-occasio-blue hover:text-occasio-navy focus-within:outline-none">
-                              <span>Tirar Foto / Selecionar Arquivo</span>
+                              <span>Tirar Foto / Selecionar Arquivo ({imagensPreview.length}/3)</span>
                               <input 
                                 ref={fileInputRef} 
                                 type="file" 
-                                accept="image/*" 
+                                accept="image/png, image/jpeg, image/jpg"
                                 onChange={handleImageChange} 
-                                className="sr-only" 
+                                className="sr-only"
+                                multiple
                               />
                             </label>
                           </div>
-                          <p className="text-[10px] text-slate-400">Fotos de até 10MB serão comprimidas nativamente para 2MB.</p>
+                          <p className="text-[10px] text-slate-400">Aceita .png, .jpg, .jpeg. Compressão automática acima de 2MB (max 1200px).</p>
                         </div>
                       )}
                     </div>

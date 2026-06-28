@@ -28,8 +28,10 @@ interface LaudoTecnicoProps {
         nome: string
       }
     }[]
+    imagens_problema?: string[] | null
+    imagens_solucao?: string[] | null
   }
-  midias: {
+  midias?: {
     id: string
     url_storage: string
     tipo_midia: string
@@ -42,9 +44,25 @@ interface LaudoTecnicoProps {
 }
 
 export default function LaudoTecnico({ chamado, midias, onClose, imobiliaria }: LaudoTecnicoProps) {
-  // Filtra as fotos do "Antes" (enviadas pelo Inquilino) e do "Depois" (enviadas pelo Prestador)
-  const fotosAntes = midias.filter(m => m.tipo_midia === "antes")
-  const fotosDepois = midias.filter(m => m.tipo_midia === "depois")
+  // Consolida as fotos do "Antes" (imagens_problema + legacy midias)
+  const fotosAntesUrls = new Set<string>()
+  if (chamado.imagens_problema) {
+    chamado.imagens_problema.forEach(url => url && fotosAntesUrls.add(url))
+  }
+  if (midias) {
+    midias.filter(m => m.tipo_midia === "antes").forEach(m => m.url_storage && fotosAntesUrls.add(m.url_storage))
+  }
+  const fotosAntes = Array.from(fotosAntesUrls)
+
+  // Consolida as fotos do "Depois" (imagens_solucao + legacy midias)
+  const fotosDepoisUrls = new Set<string>()
+  if (chamado.imagens_solucao) {
+    chamado.imagens_solucao.forEach(url => url && fotosDepoisUrls.add(url))
+  }
+  if (midias) {
+    midias.filter(m => m.tipo_midia === "depois").forEach(m => m.url_storage && fotosDepoisUrls.add(m.url_storage))
+  }
+  const fotosDepois = Array.from(fotosDepoisUrls)
 
   // Obtém o orçamento ativo/aprovado
   const orcamento = chamado.orcamentos?.[0]
@@ -222,9 +240,9 @@ export default function LaudoTecnico({ chamado, midias, onClose, imobiliaria }: 
                 </span>
                 <div className="grid gap-2">
                   {fotosAntes.length > 0 ? (
-                    fotosAntes.map(foto => (
-                      <div key={foto.id} className="relative aspect-video rounded-lg overflow-hidden border border-slate-200 bg-slate-50 print:border-slate-400">
-                        <img src={foto.url_storage} alt="Antes da manutenção" className="w-full h-full object-cover" />
+                    fotosAntes.map((url, idx) => (
+                      <div key={idx} className="relative aspect-video rounded-lg overflow-hidden border border-slate-200 bg-slate-50 print:border-slate-400">
+                        <img src={url} alt={`Antes ${idx + 1}`} className="w-full h-full object-cover" />
                       </div>
                     ))
                   ) : (
@@ -242,9 +260,9 @@ export default function LaudoTecnico({ chamado, midias, onClose, imobiliaria }: 
                 </span>
                 <div className="grid gap-2">
                   {fotosDepois.length > 0 ? (
-                    fotosDepois.map(foto => (
-                      <div key={foto.id} className="relative aspect-video rounded-lg overflow-hidden border border-slate-200 bg-slate-50 print:border-slate-400">
-                        <img src={foto.url_storage} alt="Depois da manutenção" className="w-full h-full object-cover" />
+                    fotosDepois.map((url, idx) => (
+                      <div key={idx} className="relative aspect-video rounded-lg overflow-hidden border border-slate-200 bg-slate-50 print:border-slate-400">
+                        <img src={url} alt={`Depois ${idx + 1}`} className="w-full h-full object-cover" />
                       </div>
                     ))
                   ) : (
