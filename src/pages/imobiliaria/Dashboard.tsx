@@ -231,7 +231,7 @@ export default function Dashboard() {
   // Estados de filtros
   const [filtroStatus, setFiltroStatus] = useState<string>("todos")
   const [filtroCategoria, setFiltroCategoria] = useState<string>("todos")
-  const [filtroPeriodo, setFiltroPeriodo] = useState<string>("todos")
+  const [filtroPeriodo, setFiltroPeriodo] = useState<string>("mes_atual")
   const [dataInicioPersonalizada, setDataInicioPersonalizada] = useState<string>("")
   const [dataFimPersonalizada, setDataFimPersonalizada] = useState<string>("")
   
