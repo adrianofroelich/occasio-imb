@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, Hammer, AlertCircle,
-  User, UserCheck, FileText, Coins, TrendingUp, Calendar, Plus, Printer
+  User, UserCheck, FileText, Coins, TrendingUp, Calendar, Plus, Printer, MapPin
 } from "lucide-react"
 
 // Tipagens locais
@@ -1123,6 +1123,29 @@ export default function PrestadorDashboard() {
                             </Badge>
                           )}
                         </div>
+
+                        {/* Bloco de Agendamento e Endereço destacado para programação */}
+                        <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-lg space-y-2 text-xs">
+                          <div className="flex items-start gap-2 text-amber-950">
+                            <Calendar className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="block font-bold text-[10px] uppercase tracking-wider text-amber-800">Dia/Horário para Atendimento (Inquilino)</span>
+                              <strong className="text-xs font-black text-amber-950 block mt-0.5">
+                                {chamado.disponibilidade_atendimento || "Não informado"}
+                              </strong>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2 text-slate-700 pt-1.5 border-t border-amber-200/50">
+                            <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="block font-bold text-[10px] uppercase tracking-wider text-slate-500">Endereço de Visita</span>
+                              <strong className="text-xs text-slate-800 block mt-0.5">
+                                {chamado.imovel?.endereco || "Não disponível"} {chamado.imovel?.bairro ? `(${chamado.imovel.bairro})` : ""}
+                              </strong>
+                            </div>
+                          </div>
+                        </div>
+
                         <p className="text-slate-500 line-clamp-2 leading-relaxed">{chamado.descricao_problema}</p>
                         
                         {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
@@ -1145,20 +1168,21 @@ export default function PrestadorDashboard() {
                           </div>
                         )}
                         
-                        <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded border border-slate-100 text-[11px] text-slate-600">
-                          <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"}</div>
-                          {!ehTecnico && chamado.tecnico && (
-                            <div><strong>Técnico designado:</strong> <strong className="text-slate-800">{chamado.tecnico.nome}</strong></div>
-                          )}
-                          {!ehTecnico && jaEnviouProposta && (
-                            <div className="bg-orange-50/50 border border-orange-100 p-2 rounded mt-1 text-orange-950">
-                              <span className="block font-bold text-[10px] uppercase text-orange-800 mb-0.5">Valores inseridos pelo técnico:</span>
-                              Mão de Obra: R$ {orcPendente.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
-                              Materiais: R$ {orcPendente.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
-                              Prazo: {orcPendente.prazo_execucao_dias} dias
-                            </div>
-                          )}
-                        </div>
+                        {((!ehTecnico && chamado.tecnico) || (!ehTecnico && jaEnviouProposta)) && (
+                          <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded border border-slate-100 text-[11px] text-slate-600">
+                            {!ehTecnico && chamado.tecnico && (
+                              <div><strong>Técnico designado:</strong> <strong className="text-slate-800">{chamado.tecnico.nome}</strong></div>
+                            )}
+                            {!ehTecnico && jaEnviouProposta && (
+                              <div className="bg-orange-50/50 border border-orange-100 p-2 rounded mt-1 text-orange-950">
+                                <span className="block font-bold text-[10px] uppercase text-orange-800 mb-0.5">Valores inseridos pelo técnico:</span>
+                                Mão de Obra: R$ {orcPendente.valor_servico_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                                Materiais: R$ {orcPendente.valor_materiais_r$.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br/>
+                                Prazo: {orcPendente.prazo_execucao_dias} dias
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
                           {ehTecnico ? (
@@ -1642,9 +1666,30 @@ export default function PrestadorDashboard() {
                                   {chamado.status === 'os_liberada' ? "Liberada" : "Em Execução"}
                                 </Badge>
                               </div>
+
+                              {/* Bloco de Agendamento e Endereço destacado para programação */}
+                              <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-lg space-y-2 text-xs">
+                                <div className="flex items-start gap-2 text-amber-950">
+                                  <Calendar className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                                  <div>
+                                    <span className="block font-bold text-[10px] uppercase tracking-wider text-amber-800">Dia/Horário para Atendimento (Inquilino)</span>
+                                    <strong className="text-xs font-black text-amber-950 block mt-0.5">
+                                      {chamado.disponibilidade_atendimento || "Não informado"}
+                                    </strong>
+                                  </div>
+                                </div>
+                                <div className="flex items-start gap-2 text-slate-700 pt-1.5 border-t border-amber-200/50">
+                                  <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                                  <div>
+                                    <span className="block font-bold text-[10px] uppercase tracking-wider text-slate-500">Endereço de Visita</span>
+                                    <strong className="text-xs text-slate-800 block mt-0.5">
+                                      {chamado.imovel?.endereco || "Não disponível"} {chamado.imovel?.bairro ? `(${chamado.imovel.bairro})` : ""}
+                                    </strong>
+                                  </div>
+                                </div>
+                              </div>
                               
                               <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
-                                <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})</div>
                                 <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
                               </div>
 
@@ -1729,9 +1774,30 @@ export default function PrestadorDashboard() {
                                       Liberada
                                     </Badge>
                                   </div>
+
+                                  {/* Bloco de Agendamento e Endereço destacado para programação */}
+                                  <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-lg space-y-2 text-xs">
+                                    <div className="flex items-start gap-2 text-amber-950">
+                                      <Calendar className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                                      <div>
+                                        <span className="block font-bold text-[10px] uppercase tracking-wider text-amber-800">Dia/Horário para Atendimento (Inquilino)</span>
+                                        <strong className="text-xs font-black text-amber-950 block mt-0.5">
+                                          {chamado.disponibilidade_atendimento || "Não informado"}
+                                        </strong>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-start gap-2 text-slate-700 pt-1.5 border-t border-amber-200/50">
+                                      <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                                      <div>
+                                        <span className="block font-bold text-[10px] uppercase tracking-wider text-slate-500">Endereço de Visita</span>
+                                        <strong className="text-xs text-slate-800 block mt-0.5">
+                                          {chamado.imovel?.endereco || "Não disponível"} {chamado.imovel?.bairro ? `(${chamado.imovel.bairro})` : ""}
+                                        </strong>
+                                      </div>
+                                    </div>
+                                  </div>
                                   
                                   <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
-                                    <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})</div>
                                     <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
                                     {chamado.tecnico && (
                                       <div className="pt-1 border-t border-slate-200 mt-1 flex items-center gap-1 text-slate-700">
@@ -1800,9 +1866,30 @@ export default function PrestadorDashboard() {
                                       Em Execução
                                     </Badge>
                                   </div>
+
+                                  {/* Bloco de Agendamento e Endereço destacado para programação */}
+                                  <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-lg space-y-2 text-xs">
+                                    <div className="flex items-start gap-2 text-amber-950">
+                                      <Calendar className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                                      <div>
+                                        <span className="block font-bold text-[10px] uppercase tracking-wider text-amber-800">Dia/Horário para Atendimento (Inquilino)</span>
+                                        <strong className="text-xs font-black text-amber-950 block mt-0.5">
+                                          {chamado.disponibilidade_atendimento || "Não informado"}
+                                        </strong>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-start gap-2 text-slate-700 pt-1.5 border-t border-amber-200/50">
+                                      <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                                      <div>
+                                        <span className="block font-bold text-[10px] uppercase tracking-wider text-slate-500">Endereço de Visita</span>
+                                        <strong className="text-xs text-slate-800 block mt-0.5">
+                                          {chamado.imovel?.endereco || "Não disponível"} {chamado.imovel?.bairro ? `(${chamado.imovel.bairro})` : ""}
+                                        </strong>
+                                      </div>
+                                    </div>
+                                  </div>
                                   
                                   <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
-                                    <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})</div>
                                     <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
                                     {chamado.tecnico && (
                                       <div className="pt-1 border-t border-slate-200 mt-1 flex items-center gap-1 text-slate-700">
