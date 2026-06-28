@@ -1154,7 +1154,7 @@ export default function Dashboard() {
               : "text-slate-500 hover:text-slate-800"
           }`}
         >
-          Chamados Ativos ({chamados.filter(c => c.status !== 'servico_concluido' && c.status !== 'encerrado').length})
+          Chamados Ativos ({chamados.filter(c => c.status !== 'servico_concluido' && c.status !== 'encerrado' && c.status !== 'reprovado').length})
         </button>
         <button
           onClick={() => setActiveTab("financeiro")}
@@ -1344,7 +1344,7 @@ export default function Dashboard() {
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Cotações / Propostas</p>
               <h3 className="text-2xl font-bold text-occasio-navy">
-                {chamados.filter(c => c.status === 'aguardando_orcamento' || c.status === 'orcamento_recebido').length}
+                {chamados.filter(c => c.status === 'aguardando_orcamento' || c.status === 'orcamento_recebido' || c.status === 'analise_proprietario' || c.status === 'aguardando_autorizacao').length}
               </h3>
             </div>
           </CardContent>
@@ -1372,7 +1372,7 @@ export default function Dashboard() {
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Concluídos</p>
               <h3 className="text-2xl font-bold text-occasio-navy">
-                {chamados.filter(c => c.status === 'servico_concluido' || c.status === 'encerrado').length}
+                {chamados.filter(c => c.status === 'servico_concluido' || c.status === 'encerrado' || c.status === 'reprovado').length}
               </h3>
             </div>
           </CardContent>
