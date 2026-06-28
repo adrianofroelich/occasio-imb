@@ -1105,13 +1105,26 @@ export default function Dashboard() {
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-occasio-navy flex items-center gap-2">
-            <Wrench className="h-7 w-7 text-occasio-blue" /> Chamados e O.S. Realtime
-          </h1>
-          <p className="text-slate-500 text-sm md:text-base">
-            Visualize chamados abertos por inquilinos em tempo real. Efetue triagens, aprove propostas e dispare ordens de serviço.
-          </p>
+        <div className="flex items-center gap-3">
+          {perfil?.logo_url ? (
+            <img 
+              src={perfil.logo_url} 
+              alt={perfil.nome} 
+              className="h-12 max-h-12 w-auto object-contain rounded border border-slate-200 bg-white p-1" 
+            />
+          ) : (
+            <div className="h-12 w-12 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-400">
+              <User className="h-6 w-6" />
+            </div>
+          )}
+          <div>
+            <h1 className="text-xl md:text-2xl font-extrabold text-occasio-navy">
+              {perfil?.nome || "Minha Imobiliária"}
+            </h1>
+            <p className="text-slate-500 text-xs md:text-sm">
+              Painel de O.S. &amp; Triagem Realtime
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {realtimeLoading && (
@@ -2402,6 +2415,7 @@ Extrato gerado eletronicamente para fins de conciliação.
           chamado={chamadoAtivo as any}
           midias={midias}
           onClose={() => setMostrarLaudo(false)}
+          imobiliaria={perfil ? { nome: perfil.nome, logo_url: perfil.logo_url || null } : null}
         />
       )}
 

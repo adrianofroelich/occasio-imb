@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
-import { supabase, obterMensagemErroEdge } from "@/lib/supabase"
-import { useAuth } from "@/hooks/useAuth"
 import { useNavigate } from "react-router-dom"
+import { useAuth } from "@/hooks/useAuth"
+import { supabase, obterMensagemErroEdge } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { comprimirLogomarca } from "@/lib/compressor"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -30,6 +31,7 @@ interface PerfilUsuario {
   estado?: string | null
   tipo_repasse?: 'mensal' | 'quinzenal' | 'semanal' | 'por_servico' | null
   prazo_repasse_dias?: number | null
+  logo_url?: string | null
 }
 
 interface Vinculo {
@@ -121,6 +123,8 @@ export default function AdminDashboard() {
   const [editTipoRepasse, setEditTipoRepasse] = useState<"mensal" | "quinzenal" | "semanal" | "por_servico" | "">("")
   const [editPrazoRepasseDias, setEditPrazoRepasseDias] = useState<number | "">("")
   const [editando, setEditando] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [editLogoUrl, setEditLogoUrl] = useState<string | null>(null)
 
   // Estados de Exclusão Crítica
   const [perfilParaExcluir, setPerfilParaExcluir] = useState<PerfilUsuario | null>(null)
@@ -260,8 +264,62 @@ export default function AdminDashboard() {
     setEditEstado(p.estado || "")
     setEditTipoRepasse(p.tipo_repasse || "")
     setEditPrazoRepasseDias(p.prazo_repasse_dias ?? "")
+    setEditLogoUrl(p.logo_url || null)
     setErro(null)
     setSucesso(null)
+  }
+
+  const handleUploadLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !perfilEditando) return
+
+    const extensoesAceitas = ["image/png", "image/jpeg", "image/jpg"]
+    if (!extensoesAceitas.includes(file.type)) {
+      setErro("Formato de arquivo inválido. Apenas .png, .jpg, .jpeg são aceitos.")
+      return
+    }
+
+    setUploadingLogo(true)
+    setErro(null)
+    setSucesso(null)
+
+    try {
+      const arquivoParaUpload = await comprimirLogomarca(file)
+      const extensao = file.name.split('.').pop()
+      const caminhoArquivo = `${perfilEditando.id}/logo_${Date.now()}.${extensao}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("logomarcas")
+        .upload(caminhoArquivo, arquivoParaUpload, {
+          cacheControl: "3600",
+          upsert: true
+        })
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage
+         .from("logomarcas")
+         .getPublicUrl(caminhoArquivo)
+
+      setEditLogoUrl(publicUrl)
+
+      const { error: dbError } = await supabase
+        .from("perfis")
+        .update({ logo_url: publicUrl })
+        .eq("id", perfilEditando.id)
+
+      if (dbError) throw dbError
+
+      setSucesso("Logomarca enviada e atualizada com sucesso!")
+    } catch (err: any) {
+      console.error("Erro no upload da logomarca:", err)
+      setErro(err.message || "Erro inesperado ao realizar o upload da logomarca.")
+    } finally {
+      setUploadingLogo(false)
+      if (e.target) {
+        e.target.value = ""
+      }
+    }
   }
 
   const handleSalvarEdicao = async (e: React.FormEvent) => {
@@ -1370,6 +1428,71 @@ export default function AdminDashboard() {
                         />
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Personalização de Marca / Logomarca */}
+                <div className="border-t border-slate-100 pt-3 space-y-3">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">Personalização de Marca</span>
+                  <div className="flex flex-col sm:flex-row items-center gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200/60">
+                    <div className="flex-shrink-0">
+                      {editLogoUrl ? (
+                        <div className="relative group">
+                          <img 
+                            src={editLogoUrl} 
+                            alt="Logomarca do parceiro" 
+                            className="h-16 w-16 object-contain rounded border border-slate-200 bg-white p-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!perfilEditando) return
+                              setUploadingLogo(true)
+                              try {
+                                const { error: dbError } = await supabase
+                                  .from("perfis")
+                                  .update({ logo_url: null })
+                                  .eq("id", perfilEditando.id)
+                                if (dbError) throw dbError
+                                setEditLogoUrl(null)
+                                setSucesso("Logomarca removida com sucesso!")
+                              } catch (err: any) {
+                                setErro("Erro ao remover logomarca.")
+                              } finally {
+                                setUploadingLogo(false)
+                              }
+                            }}
+                            className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors shadow-sm cursor-pointer"
+                            title="Remover logomarca"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="h-16 w-16 rounded border border-dashed border-slate-300 bg-slate-100 flex items-center justify-center text-slate-400">
+                          <Landmark className="h-7 w-7 text-slate-350" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-grow space-y-1 w-full">
+                      <label className="block text-[11px] font-semibold text-slate-700">Carregar Logomarca</label>
+                      <input
+                        type="file"
+                        accept=".png, .jpg, .jpeg"
+                        onChange={handleUploadLogo}
+                        disabled={uploadingLogo || editando}
+                        className="w-full text-xs text-slate-500 file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-[11px] file:font-semibold file:bg-occasio-blue/10 file:text-occasio-blue hover:file:bg-occasio-blue/20 file:cursor-pointer disabled:opacity-50"
+                      />
+                      <span className="block text-[10px] text-slate-400 leading-tight">
+                        Formatos aceitos: .png, .jpg, .jpeg. Resolução sugerida: proporção quadrada ou paisagem leve (ex: 512x512 ou 800x600 px). Limite final de 2 MB (compressão inteligente no cliente).
+                      </span>
+                      {uploadingLogo && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-occasio-blue font-semibold mt-1">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Processando e enviando imagem...</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 

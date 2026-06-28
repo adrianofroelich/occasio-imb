@@ -20,6 +20,7 @@ export interface Perfil {
   prazo_repasse_dias?: number | null
   criado_em: string
   atualizado_em: string
+  logo_url?: string | null
 }
 
 // Interface que define o valor provido pelo contexto de autenticação

@@ -15,6 +15,7 @@ interface ReciboData {
       documento_identificacao: string | null
       telefone: string | null
       email: string | null
+      logo_url?: string | null
     }
   }
   tecnico: {
@@ -148,7 +149,8 @@ export default function ReciboTecnicoPrint() {
               nome,
               documento_identificacao,
               telefone,
-              email
+              email,
+              logo_url
             )
           `)
           .eq("id", fechamento_id)
@@ -283,17 +285,26 @@ export default function ReciboTecnicoPrint() {
         </div>
 
         {/* Cabeçalho */}
-        <div className="text-center border-b pb-4 space-y-1.5">
-          <h1 className="text-xl font-black uppercase tracking-wider text-slate-900">
-            Recibo de Pagamento de Prestação de Serviços
-          </h1>
-          <div className="text-xs text-slate-600 font-semibold uppercase">
-            Emitido por: {data.fechamento.empresa.nome}
-          </div>
-          {data.fechamento.empresa.documento_identificacao && (
-            <div className="text-xs text-slate-500 font-mono">
-              CNPJ: {formatarCpfCnpj(data.fechamento.empresa.documento_identificacao)}
+        <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between border-b pb-4 gap-4">
+          <div className="text-center sm:text-left space-y-1.5 flex-grow">
+            <h1 className="text-lg font-black uppercase tracking-wider text-slate-900">
+              Recibo de Pagamento de Prestação de Serviços
+            </h1>
+            <div className="text-xs text-slate-600 font-semibold uppercase">
+              Emitido por: {data.fechamento.empresa.nome}
             </div>
+            {data.fechamento.empresa.documento_identificacao && (
+              <div className="text-xs text-slate-500 font-mono">
+                CNPJ: {formatarCpfCnpj(data.fechamento.empresa.documento_identificacao)}
+              </div>
+            )}
+          </div>
+          {data.fechamento.empresa.logo_url && (
+            <img 
+              src={data.fechamento.empresa.logo_url} 
+              alt={data.fechamento.empresa.nome} 
+              className="h-14 max-h-14 w-auto object-contain rounded border border-slate-200 p-0.5 bg-white flex-shrink-0" 
+            />
           )}
         </div>
 

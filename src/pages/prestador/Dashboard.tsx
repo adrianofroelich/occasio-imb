@@ -942,16 +942,31 @@ export default function PrestadorDashboard() {
       
       {/* Cabeçalho */}
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-xl md:text-2xl font-extrabold text-occasio-navy flex items-center gap-2">
-            <Hammer className="h-6 w-6 text-occasio-blue" /> 
-            {ehTecnico ? "PWA do Técnico" : "Painel do Prestador (PJ)"}
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {ehTecnico 
-              ? "Orçamentos de campo e ordens de serviço delegadas." 
-              : "Gestão comercial, delegação técnica e homologação."}
-          </p>
+        <div className="flex items-center gap-3">
+          {!ehTecnico && (
+            perfil?.logo_url ? (
+              <img 
+                src={perfil.logo_url} 
+                alt={perfil.nome} 
+                className="h-12 max-h-12 w-auto object-contain rounded border border-slate-200 bg-white p-1" 
+              />
+            ) : (
+              <div className="h-12 w-12 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-400">
+                <Hammer className="h-6 w-6" />
+              </div>
+            )
+          )}
+          <div>
+            <h1 className="text-xl md:text-2xl font-extrabold text-occasio-navy flex items-center gap-2">
+              {ehTecnico && <Hammer className="h-5 w-5 text-occasio-blue" />}
+              {ehTecnico ? "PWA do Técnico" : (perfil?.nome || "Painel do Prestador (PJ)")}
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {ehTecnico 
+                ? "Orçamentos de campo e ordens de serviço delegadas." 
+                : "Gestão comercial, delegação técnica e homologação."}
+            </p>
+          </div>
         </div>
         {realtimeLoading && (
           <span className="text-xs text-occasio-blue flex items-center gap-1 font-semibold animate-pulse">

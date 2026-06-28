@@ -5,7 +5,7 @@ import Beneficios from "./pages/Beneficios"
 import { Button } from "@/components/ui/button"
 import { AuthProvider, useAuth } from "./hooks/useAuth"
 import type { TipoPerfil } from "./hooks/useAuth"
-import { Loader2 } from "lucide-react"
+import { Loader2, User } from "lucide-react"
 import LoginTeste from "./pages/LoginTeste"
 import Login from "./pages/Login"
 import Imoveis from "./pages/imobiliaria/Imoveis"
@@ -224,7 +224,21 @@ function MainLayout() {
           {/* Botões de Ação da Direita */}
           <div className="flex items-center gap-2 sm:gap-4">
             {user && perfil ? (
-              <div className="flex items-center gap-2 md:gap-4 text-xs">
+              <div className="flex items-center gap-2 md:gap-3 text-xs">
+                {/* Avatar / Logomarca Customizada Corporativa */}
+                {(perfil.perfil === "imobiliaria" || (perfil.perfil === "prestador" && !perfil.empresa_mae_id)) && (
+                  perfil.logo_url ? (
+                    <img 
+                      src={perfil.logo_url} 
+                      alt={perfil.nome} 
+                      className="h-8 max-h-8 w-auto object-contain rounded border border-slate-200 bg-white p-0.5" 
+                    />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-400">
+                      <User className="h-4 w-4" />
+                    </div>
+                  )
+                )}
                 <span className="hidden lg:inline text-slate-500 font-medium">
                   Olá, <strong className="text-occasio-navy">{perfil.nome.split(" ")[0]}</strong> ({perfil.perfil.replace("_", " ")})
                 </span>

@@ -168,6 +168,20 @@ occasio-imb/
 
 ---
 
+## 🎨 Personalização de Marca e Upload de Logomarcas
+
+A partir da versão 1.4.0, o Occasio.Imob oferece suporte completo à personalização dinâmica de identidade visual para Imobiliárias e Prestadores de Serviço PJ:
+
+1. **Upload no Admin SaaS (`/admin/dashboard`):** O super administrador do ecossistema pode enviar e excluir logomarcas nos formulários de edição de parceiros corporativos.
+2. **Compressão Inteligente Reativa (Frontend):** Se um arquivo maior que 2 MB for selecionado, o utilitário Canvas nativo (`comprimirLogomarca` em `src/lib/compressor.ts`) realiza o redimensionamento dinâmico automático limitando a resolução a 800px (preservando o formato original PNG/JPEG e canal de transparência de PNGs) mantendo o arquivo final bem abaixo do teto de 2 MB do banco.
+3. **Bucket de Storage Seguro (`logomarcas`):** As imagens são organizadas em pastas correspondentes ao ID do perfil parceiro (`/id_perfil/logo_[timestamp].[ext]`). As políticas de RLS garantem que a leitura seja pública, mas que a gravação/exclusão pertença estritamente ao dono do perfil corporativo logado ou a administradores `super_admin`.
+4. **Exibição Dinâmica no Ecossistema:**
+   - **Navbar Superior:** Ao lado do nome corporativo e perfil do usuário logado (`App.tsx`).
+   - **Cabeçalho das Dashboards:** No topo dos painéis da Imobiliária e da Prestadora PJ ao lado do nome da empresa.
+   - **Relatórios de Impressão (PDF):** Cabeçalho timbrado dinâmico profissional em preto e branco ou colorido nas telas `/chamado/print/:id` (ChamadoPrint), `/financeiro/recibo-tecnico/` (ReciboTecnicoPrint) e no modal de laudo técnico (`LaudoTecnico.tsx`).
+
+---
+
 ## 💻 Desenvolvimento Local
 
 1. Instale as dependências:
@@ -181,5 +195,8 @@ occasio-imb/
 3. Para testar o build de produção:
    ```bash
    npm run build
+   ```
+4. visualize o build localmente:
+   ```bash
    npm run preview
    ```

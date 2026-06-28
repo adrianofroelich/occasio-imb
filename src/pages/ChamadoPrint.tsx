@@ -35,6 +35,10 @@ interface PublicChamadoDetails {
     nome: string
     telefone: string | null
   }
+  imobiliaria?: {
+    nome: string
+    logo_url: string | null
+  } | null
   orcamentos: {
     id: string
     valor_servico_r$: number
@@ -177,9 +181,23 @@ export default function ChamadoPrint() {
       </div>
 
       {/* Cabeçalho do Documento */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 border-b border-slate-200 pb-6">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Occasio Imob" className="h-10 object-contain" />
+          {chamado.imobiliaria?.logo_url ? (
+            <img 
+              src={chamado.imobiliaria.logo_url} 
+              alt={chamado.imobiliaria.nome} 
+              className="h-14 max-h-14 w-auto object-contain rounded" 
+            />
+          ) : (
+            <img src="/logo.png" alt="Occasio Imob" className="h-10 object-contain" />
+          )}
+          {chamado.imobiliaria?.nome && (
+            <div className="border-l border-slate-300 pl-3">
+              <div className="text-sm font-bold text-slate-800">{chamado.imobiliaria.nome}</div>
+              <div className="text-[10px] text-slate-400">Gestão Imobiliária</div>
+            </div>
+          )}
         </div>
         <div className="text-left sm:text-right">
           <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Ordem de Serviço / Chamado</div>

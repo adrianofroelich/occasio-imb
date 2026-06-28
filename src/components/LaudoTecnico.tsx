@@ -35,9 +35,13 @@ interface LaudoTecnicoProps {
     tipo_midia: string
   }[]
   onClose: () => void
+  imobiliaria?: {
+    nome: string
+    logo_url: string | null
+  } | null
 }
 
-export default function LaudoTecnico({ chamado, midias, onClose }: LaudoTecnicoProps) {
+export default function LaudoTecnico({ chamado, midias, onClose, imobiliaria }: LaudoTecnicoProps) {
   // Filtra as fotos do "Antes" (enviadas pelo Inquilino) e do "Depois" (enviadas pelo Prestador)
   const fotosAntes = midias.filter(m => m.tipo_midia === "antes")
   const fotosDepois = midias.filter(m => m.tipo_midia === "depois")
@@ -91,11 +95,24 @@ export default function LaudoTecnico({ chamado, midias, onClose }: LaudoTecnicoP
           
           {/* Cabeçalho do Laudo (Print-friendly) */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b-2 border-slate-900 pb-4 gap-4">
-            <div>
-              <img src="/logo.png" alt="Occasio.Imob" className="h-10 object-contain mb-2 print:h-12" />
-              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider print:text-slate-500">
-                Laudo Técnico Consolidado de Manutenção Imobiliária
-              </p>
+            <div className="flex items-center gap-3">
+              {imobiliaria?.logo_url ? (
+                <img 
+                  src={imobiliaria.logo_url} 
+                  alt={imobiliaria.nome} 
+                  className="h-12 max-h-12 w-auto object-contain rounded" 
+                />
+              ) : (
+                <img src="/logo.png" alt="Occasio.Imob" className="h-10 object-contain mb-2 print:h-12" />
+              )}
+              <div className="border-l border-slate-200 pl-3">
+                <p className="text-xs font-bold text-slate-800">
+                  {imobiliaria?.nome || "Occasio.Imob"}
+                </p>
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider print:text-slate-500">
+                  Laudo Técnico Consolidado de Manutenção Imobiliária
+                </p>
+              </div>
             </div>
             <div className="text-right sm:text-right text-xs text-slate-500 space-y-0.5 print:text-slate-800">
               <div>Chamado: <strong className="text-slate-800 font-bold">#{chamado.id.slice(0, 8).toUpperCase()}</strong></div>
