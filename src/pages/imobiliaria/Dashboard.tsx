@@ -231,6 +231,9 @@ export default function Dashboard() {
   // Estados de filtros
   const [filtroStatus, setFiltroStatus] = useState<string>("todos")
   const [filtroCategoria, setFiltroCategoria] = useState<string>("todos")
+  const [filtroPeriodo, setFiltroPeriodo] = useState<string>("todos")
+  const [dataInicioPersonalizada, setDataInicioPersonalizada] = useState<string>("")
+  const [dataFimPersonalizada, setDataFimPersonalizada] = useState<string>("")
   
   // Estados para chamado em edição de ação rápida
   const [chamadoAtivo, setChamadoAtivo] = useState<Chamado | null>(null)
@@ -1095,7 +1098,40 @@ export default function Dashboard() {
   const chamadosFiltrados = chamados.filter((item) => {
     const atendeStatus = filtroStatus === "todos" || item.status === filtroStatus
     const atendeCategoria = filtroCategoria === "todos" || item.categoria === filtroCategoria
-    return atendeStatus && atendeCategoria
+    
+    let atendePeriodo = true
+    if (filtroPeriodo !== "todos") {
+      const dataCriacao = new Date(item.criado_em)
+      const agora = new Date()
+      
+      if (filtroPeriodo === "mes_atual") {
+        atendePeriodo = dataCriacao.getMonth() === agora.getMonth() && 
+                        dataCriacao.getFullYear() === agora.getFullYear()
+      } else if (filtroPeriodo === "ultimos_15_dias") {
+        const limite = new Date()
+        limite.setDate(agora.getDate() - 15)
+        limite.setHours(0, 0, 0, 0)
+        atendePeriodo = dataCriacao >= limite
+      } else if (filtroPeriodo === "ultimos_7_dias") {
+        const limite = new Date()
+        limite.setDate(agora.getDate() - 7)
+        limite.setHours(0, 0, 0, 0)
+        atendePeriodo = dataCriacao >= limite
+      } else if (filtroPeriodo === "personalizado") {
+        if (dataInicioPersonalizada) {
+          const inicio = new Date(dataInicioPersonalizada)
+          inicio.setHours(0, 0, 0, 0)
+          atendePeriodo = atendePeriodo && dataCriacao >= inicio
+        }
+        if (dataFimPersonalizada) {
+          const fim = new Date(dataFimPersonalizada)
+          fim.setHours(23, 59, 59, 999)
+          atendePeriodo = atendePeriodo && dataCriacao <= fim
+        }
+      }
+    }
+    
+    return atendeStatus && atendeCategoria && atendePeriodo
   })
 
   // Obtém categorias únicas para o filtro dropdown
@@ -1413,6 +1449,40 @@ export default function Dashboard() {
                 ))}
               </select>
             </div>
+
+            <div>
+              <select
+                value={filtroPeriodo}
+                onChange={(e) => setFiltroPeriodo(e.target.value)}
+                className="border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
+              >
+                <option value="todos">Qualquer Período</option>
+                <option value="mes_atual">Mês Atual</option>
+                <option value="ultimos_15_dias">Últimos 15 Dias</option>
+                <option value="ultimos_7_dias">Últimos 7 Dias</option>
+                <option value="personalizado">Período Personalizado...</option>
+              </select>
+            </div>
+
+            {filtroPeriodo === "personalizado" && (
+              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-md h-9 px-2">
+                <input
+                  type="date"
+                  value={dataInicioPersonalizada}
+                  onChange={(e) => setDataInicioPersonalizada(e.target.value)}
+                  className="bg-transparent text-[11px] focus:outline-none max-w-[110px]"
+                  title="Data de início"
+                />
+                <span className="text-slate-400 text-xs">até</span>
+                <input
+                  type="date"
+                  value={dataFimPersonalizada}
+                  onChange={(e) => setDataFimPersonalizada(e.target.value)}
+                  className="bg-transparent text-[11px] focus:outline-none max-w-[110px]"
+                  title="Data de fim"
+                />
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
