@@ -118,6 +118,16 @@ A prestadora PJ possui uma rotina específica no seu painel financeiro para fatu
 
 ---
 
+## 🔄 Fluxo de Contingência: Devolução de OS pelo Técnico de Campo
+
+A partir do PWA de Técnicos e do Painel da Prestadora PJ, o sistema implementa um fluxo operacional de contingência para gerenciar devoluções de Ordens de Serviço:
+
+1. **Devolução no PWA do Técnico (PF):** Quando uma OS está atribuída (`os_liberada`) ou em execução (`em_execucao`) no PWA do técnico, ele pode clicar em **"Devolver OS"**. Uma modal solicita a justificativa obrigatória (mínimo de 10 caracteres).
+2. **Desvinculação e Triagem:** Ao confirmar, o sistema limpa o técnico atribuído (`tecnico_id = NULL`), retorna o status da OS para `os_liberada` (liberada para execução) e grava a justificativa de forma permanente na tabela `public.historico_chamados`.
+3. **Alertas e Re-designação no Gestor (PJ):** A OS devolvida volta a aparecer instantaneamente na aba de OS Ativas do gestor da Prestadora PJ como sem responsável ("OS Sem Técnico Responsável!"). O card exibe um alerta amarelo proeminente indicando que ela já foi devolvida anteriormente e exibe a última justificativa de devolução, permitindo que o gestor a re-designe a um novo técnico diretamente dali.
+
+---
+
 ## 📁 Estrutura de Pastas (Mapa do Projeto)
 
 ```bash

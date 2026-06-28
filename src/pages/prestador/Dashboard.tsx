@@ -69,6 +69,8 @@ interface Chamado {
   }[]
   status_financeiro_tecnico?: 'pendente' | 'pago' | null
   fechamento_tecnico_id?: string | null
+  devolvido_anteriormente?: boolean
+  ultima_devolucao_justificativa?: string | null
 }
 
 // Funções auxiliares para formatação de moeda brasileira (pt-BR)
@@ -198,6 +200,11 @@ export default function PrestadorDashboard() {
   // Filtros para OS's Concluídas
   const [filtroMes, setFiltroMes] = useState<string>("")
   const [filtroCategoria, setFiltroCategoria] = useState<string>("")
+  
+  // Estados para Devolução de OS
+  const [chamadoDevolvendo, setChamadoDevolvendo] = useState<Chamado | null>(null)
+  const [justificativaDevolucao, setJustificativaDevolucao] = useState("")
+  const [devolvendoLoading, setDevolvendoLoading] = useState(false)
   
   // Lista de técnicos da equipe (Empresa PJ)
   const [tecnicosDisponiveis, setTecnicosDisponiveis] = useState<{ id: string; nome: string }[]>([])
@@ -704,12 +711,17 @@ export default function PrestadorDashboard() {
       const tecNome = tecnicosDisponiveis.find(t => t.id === tecnicoSelecionadoId)?.nome || "Técnico"
 
       // 2. Insere histórico de delegação
+      const isExecucao = chamadoDelegando.status === 'os_liberada' || chamadoDelegando.status === 'em_execucao'
+      const obsTexto = isExecucao 
+        ? `Chamado designado ao técnico ${tecNome} para execução do serviço.`
+        : `Chamado designado ao técnico ${tecNome} para realização de vistoria e cotação.`
+
       await supabase.from("historico_chamados").insert({
         chamado_id: chamadoDelegando.id,
         usuario_id: user?.id,
         status_anterior: chamadoDelegando.status,
         novo_status: chamadoDelegando.status,
-        observacao: `Chamado designado ao técnico ${tecNome} para realização de vistoria e cotação.`
+        observacao: obsTexto
       })
 
       setSucesso(`Chamado delegado com sucesso para o técnico ${tecNome}!`)
@@ -722,6 +734,39 @@ export default function PrestadorDashboard() {
       setErro(err.message || "Erro ao tentar delegar chamado.")
     } finally {
       setSalvando(false)
+    }
+  }
+
+  // Técnico PF: Devolve a OS designada a ele por algum imprevisto
+  const handleDevolverOS = async () => {
+    if (!chamadoDevolvendo) return
+    if (justificativaDevolucao.trim().length < 10) {
+      setErro("A justificativa deve conter no mínimo 10 caracteres.")
+      return
+    }
+
+    setDevolvendoLoading(true)
+    setErro(null)
+    setSucesso(null)
+
+    try {
+      const { error } = await supabase.rpc("devolver_chamado", {
+        p_chamado_id: chamadoDevolvendo.id,
+        p_justificativa: justificativaDevolucao.trim()
+      })
+
+      if (error) throw error
+
+      setSucesso("Ordem de Serviço devolvida com sucesso!")
+      setChamadoDevolvendo(null)
+      setJustificativaDevolucao("")
+      
+      await loadPrestadorData()
+    } catch (err: any) {
+      console.error(err)
+      setErro(err.message || "Erro ao tentar devolver a O.S.")
+    } finally {
+      setDevolvendoLoading(false)
     }
   }
 
@@ -1146,6 +1191,21 @@ export default function PrestadorDashboard() {
                           </div>
                         </div>
 
+                        {/* Alerta de OS Devolvida Anteriormente */}
+                        {chamado.devolvido_anteriormente && (
+                          <div className="bg-amber-50 border border-amber-200 text-amber-950 text-[11px] p-2.5 rounded-lg flex items-start gap-2 shadow-sm">
+                            <AlertCircle className="h-4.5 w-4.5 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-bold text-amber-800 block text-[10px] uppercase tracking-wider">OS Devolvida Anteriormente</span>
+                              {chamado.ultima_devolucao_justificativa && (
+                                <p className="text-[11px] text-amber-700 mt-1 italic leading-snug font-medium">
+                                  "{chamado.ultima_devolucao_justificativa}"
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         <p className="text-slate-500 line-clamp-2 leading-relaxed">{chamado.descricao_problema}</p>
                         
                         {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
@@ -1372,7 +1432,7 @@ export default function PrestadorDashboard() {
           )}
 
           {/* ======================== EMPRESA PJ: FORMULÁRIO DE DELEGAÇÃO ======================== */}
-          {activeTab === "orcamentos" && chamadoDelegando && (
+          {chamadoDelegando && (
             <Card className="border-slate-200 shadow-md bg-white">
               <CardHeader className="bg-slate-50 border-b border-slate-200 p-4">
                 <CardTitle className="text-sm font-extrabold text-occasio-navy flex items-center gap-1.5">
@@ -1623,7 +1683,7 @@ export default function PrestadorDashboard() {
           )}
 
           {/* ======================== ABA 2: OS ATIVAS ======================== */}
-          {activeTab === "os" && !chamadoConcluindo && (
+          {activeTab === "os" && !chamadoConcluindo && !chamadoDelegando && (
             <div className="space-y-4">
               {osAtivas.length === 0 ? (
                 <div className="text-center py-16 text-slate-400 bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center gap-3">
@@ -1714,6 +1774,17 @@ export default function PrestadorDashboard() {
                               )}
 
                               <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5">
+                                <Button 
+                                  onClick={() => {
+                                    setChamadoDevolvendo(chamado)
+                                    setJustificativaDevolucao("")
+                                    setErro(null)
+                                  }} 
+                                  variant="outline"
+                                  className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-bold h-8 text-[11px]"
+                                >
+                                  Devolver OS
+                                </Button>
                                 {chamado.status === 'os_liberada' ? (
                                   <Button 
                                     onClick={() => handleIniciarServico(chamado)} 
@@ -1797,6 +1868,21 @@ export default function PrestadorDashboard() {
                                     </div>
                                   </div>
                                   
+                                  {/* Alerta de OS Devolvida Anteriormente */}
+                                  {chamado.devolvido_anteriormente && (
+                                    <div className="bg-amber-50 border border-amber-200 text-amber-950 text-[11px] p-2.5 rounded-lg flex items-start gap-2 shadow-sm mb-2">
+                                      <AlertCircle className="h-4.5 w-4.5 text-amber-600 shrink-0 mt-0.5" />
+                                      <div>
+                                        <span className="font-bold text-amber-800 block text-[10px] uppercase tracking-wider">OS Devolvida Anteriormente</span>
+                                        {chamado.ultima_devolucao_justificativa && (
+                                          <p className="text-[11px] text-amber-700 mt-1 italic leading-snug font-medium">
+                                            "{chamado.ultima_devolucao_justificativa}"
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
                                   <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
                                     <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
                                     {chamado.tecnico && (
@@ -1806,6 +1892,16 @@ export default function PrestadorDashboard() {
                                       </div>
                                     )}
                                   </div>
+
+                                  {!chamado.tecnico_id && (
+                                    <div className="bg-red-50 border border-red-200 text-red-955 text-[11px] p-2.5 rounded-lg flex items-start gap-2 mt-2 shadow-sm">
+                                      <AlertCircle className="h-4.5 w-4.5 text-red-600 shrink-0 mt-0.5" />
+                                      <div>
+                                        <strong className="text-red-800 block text-[10px] uppercase tracking-wider">Atenção: OS Sem Técnico Responsável!</strong>
+                                        <p className="text-[10px] text-red-700 mt-0.5">Esta OS precisa ser designada a um técnico para ser iniciada no campo.</p>
+                                      </div>
+                                    </div>
+                                  )}
 
                                   {/* Exibe a foto do problema anexada (tipo_midia = 'antes') se houver */}
                                   {chamado.chamados_midias && chamado.chamados_midias.some(m => m.tipo_midia === 'antes') && (
@@ -1827,9 +1923,24 @@ export default function PrestadorDashboard() {
                                     </div>
                                   )}
 
-                                  <div className="bg-teal-50/50 border border-teal-100 text-teal-800 text-[10px] p-2 rounded font-semibold mt-1">
-                                    A OS foi enviada e recebida no PWA do Técnico {chamado.tecnico?.nome || "designado"}. Aguardando o início do serviço no local.
-                                  </div>
+                                  {!chamado.tecnico_id ? (
+                                    <div className="flex justify-end gap-2 border-t border-slate-100 pt-2.5 mt-2">
+                                      <Button 
+                                        onClick={() => {
+                                          setChamadoDelegando(chamado)
+                                          setTecnicoSelecionadoId("")
+                                        }} 
+                                        size="sm" 
+                                        className="bg-red-600 hover:bg-red-700 text-white text-[10px] px-3 h-7 font-bold flex items-center gap-1"
+                                      >
+                                        <UserCheck className="h-3.5 w-3.5" /> Designar Técnico
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="bg-teal-50/50 border border-teal-100 text-teal-800 text-[10px] p-2 rounded font-semibold mt-1">
+                                      A OS foi enviada e recebida no PWA do Técnico {chamado.tecnico?.nome || "designado"}. Aguardando o início do serviço no local.
+                                    </div>
+                                  )}
                                 </CardContent>
                               </Card>
                             ))}
@@ -1889,6 +2000,21 @@ export default function PrestadorDashboard() {
                                     </div>
                                   </div>
                                   
+                                  {/* Alerta de OS Devolvida Anteriormente */}
+                                  {chamado.devolvido_anteriormente && (
+                                    <div className="bg-amber-50 border border-amber-200 text-amber-955 text-[11px] p-2.5 rounded-lg flex items-start gap-2 shadow-sm mb-2">
+                                      <AlertCircle className="h-4.5 w-4.5 text-amber-600 shrink-0 mt-0.5" />
+                                      <div>
+                                        <span className="font-bold text-amber-800 block text-[10px] uppercase tracking-wider">OS Devolvida Anteriormente</span>
+                                        {chamado.ultima_devolucao_justificativa && (
+                                          <p className="text-[11px] text-amber-700 mt-1 italic leading-snug font-medium">
+                                            "{chamado.ultima_devolucao_justificativa}"
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
                                   <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
                                     <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
                                     {chamado.tecnico && (
@@ -3020,6 +3146,87 @@ export default function PrestadorDashboard() {
           </div>
         )
       })()}
+
+      {/* Modal de Justificativa de Devolução da OS */}
+      {chamadoDevolvendo && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9998] flex items-center justify-center p-4">
+          <Card className="w-full max-w-md border-slate-200 shadow-xl bg-white animate-in fade-in zoom-in-95 duration-150">
+            <CardHeader className="bg-red-50 border-b border-red-100 p-4">
+              <CardTitle className="text-sm font-extrabold text-red-900 flex items-center gap-1.5">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                Devolver Ordem de Serviço
+              </CardTitle>
+              <CardDescription className="text-xs text-red-700">
+                Você está devolvendo a OS: <strong>{chamadoDevolvendo.titulo}</strong>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              <div className="text-xs text-slate-600 leading-relaxed">
+                Esta ação removerá você como técnico responsável e enviará a OS de volta para a triagem da Prestadora. 
+                A justificativa será gravada no histórico de auditoria e ficará visível para o gestor.
+              </div>
+              
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                  Justificativa da Devolução *
+                </label>
+                <textarea
+                  value={justificativaDevolucao}
+                  onChange={(e) => setJustificativaDevolucao(e.target.value)}
+                  placeholder="Digite o motivo detalhado da devolução (mínimo de 10 caracteres)..."
+                  required
+                  rows={4}
+                  className="w-full border border-slate-200 rounded-md p-2 text-xs focus:outline-none focus:ring-1 focus:ring-red-500 bg-white"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                  <span>Mínimo 10 caracteres</span>
+                  <span className={justificativaDevolucao.length >= 10 ? "text-green-600" : "text-red-500"}>
+                    {justificativaDevolucao.length} caracteres
+                  </span>
+                </div>
+              </div>
+
+              {erro && (
+                <Alert variant="destructive" className="p-2.5">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="text-[11px] font-medium leading-tight">{erro}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setChamadoDevolvendo(null)
+                    setJustificativaDevolucao("")
+                    setErro(null)
+                  }}
+                  disabled={devolvendoLoading}
+                  className="text-xs h-9 px-4 font-semibold"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleDevolverOS}
+                  disabled={devolvendoLoading || justificativaDevolucao.length < 10}
+                  size="sm"
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold h-9 px-4 text-xs flex items-center gap-1.5"
+                >
+                  {devolvendoLoading ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Devolvendo...
+                    </>
+                  ) : (
+                    "Confirmar Devolução"
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Modal para ampliação de imagens (Lightbox) */}
       {imagemZoom && (
