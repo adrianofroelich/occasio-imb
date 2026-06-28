@@ -48,6 +48,8 @@ interface Chamado {
       nome: string
     }
   }[]
+  imagens_problema?: string[] | null
+  imagens_solucao?: string[] | null
 }
 
 const STATUS_CONFIG: Record<StatusChamado, { label: string; cor: string; bg: string }> = {
@@ -633,14 +635,28 @@ export default function ProprietarioDashboard() {
                   </div>
                 )}
 
-                {/* Fotos da Vistoria */}
-                {midias.length > 0 && (
+                {/* Evidências do Problema (Antes) */}
+                {(((chamadoAtivo.imagens_problema && chamadoAtivo.imagens_problema.length > 0) || 
+                  midias.some(m => m.tipo_midia === "antes"))) && (
                   <div>
                     <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                      <Camera className="h-3 w-3 text-slate-400" /> Fotos do Dano
+                      <Camera className="h-3 w-3 text-slate-400" /> Fotos do Problema (Antes)
                     </label>
                     <div className="grid grid-cols-2 gap-2">
-                      {midias.map(midia => (
+                      {chamadoAtivo.imagens_problema?.map((url, idx) => (
+                        <div 
+                          key={`prob-new-${idx}`} 
+                          onClick={() => setUrlImagemZoom(url)}
+                          className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                        >
+                          <img 
+                            src={url} 
+                            alt={`Foto do Problema ${idx + 1}`}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          />
+                        </div>
+                      ))}
+                      {midias.filter(m => m.tipo_midia === "antes" && (!chamadoAtivo.imagens_problema || !chamadoAtivo.imagens_problema.includes(m.url_storage))).map(midia => (
                         <div 
                           key={midia.id} 
                           onClick={() => setUrlImagemZoom(midia.url_storage)}
@@ -648,12 +664,47 @@ export default function ProprietarioDashboard() {
                         >
                           <img 
                             src={midia.url_storage} 
-                            alt={`Foto ${midia.tipo_midia}`}
+                            alt="Foto do Problema"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                           />
-                          <div className="absolute inset-x-0 bottom-0 bg-black/60 text-[9px] text-white py-0.5 px-1 font-semibold text-center capitalize">
-                            {midia.tipo_midia}
-                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Evidências da Solução (Depois) */}
+                {(((chamadoAtivo.imagens_solucao && chamadoAtivo.imagens_solucao.length > 0) || 
+                  midias.some(m => m.tipo_midia === "depois"))) && (
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <Camera className="h-3 w-3 text-slate-400" /> Fotos da Solução (Depois)
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {chamadoAtivo.imagens_solucao?.map((url, idx) => (
+                        <div 
+                          key={`sol-new-${idx}`} 
+                          onClick={() => setUrlImagemZoom(url)}
+                          className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                        >
+                          <img 
+                            src={url} 
+                            alt={`Foto da Solução ${idx + 1}`}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          />
+                        </div>
+                      ))}
+                      {midias.filter(m => m.tipo_midia === "depois" && (!chamadoAtivo.imagens_solucao || !chamadoAtivo.imagens_solucao.includes(m.url_storage))).map(midia => (
+                        <div 
+                          key={midia.id} 
+                          onClick={() => setUrlImagemZoom(midia.url_storage)}
+                          className="relative aspect-video rounded border overflow-hidden bg-slate-100 cursor-pointer group hover:border-occasio-blue transition-all"
+                        >
+                          <img 
+                            src={midia.url_storage} 
+                            alt="Foto da Solução"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          />
                         </div>
                       ))}
                     </div>
