@@ -86,28 +86,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    // 1. Busca a sessão atual ativa ao iniciar o provider
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setUser(session.user)
-        fetchPerfil(session.user.id).finally(() => setLoading(false))
-      } else {
+    // 1. Busca a sessão atual ativa ao iniciar o provider com tratamento de erro robusto
+    supabase.auth.getSession()
+      .then(async ({ data: { session }, error }) => {
+        if (error) {
+          console.warn("Erro ao buscar sessão (refresh token expirado/inválido). Limpando dados locais:", error.message)
+          // Executa signOut silencioso para invalidar tokens inválidos no localStorage
+          await supabase.auth.signOut().catch(() => {})
+          setUser(null)
+          setPerfil(null)
+          setLoading(false)
+          return
+        }
+
+        if (session) {
+          setUser(session.user)
+          fetchPerfil(session.user.id).finally(() => setLoading(false))
+        } else {
+          setUser(null)
+          setPerfil(null)
+          setLoading(false)
+        }
+      })
+      .catch(async (err) => {
+        console.error("Exceção crítica na inicialização da sessão do Supabase:", err)
+        // Executa signOut em caso de rejeição da promessa
+        await supabase.auth.signOut().catch(() => {})
         setUser(null)
         setPerfil(null)
         setLoading(false)
-      }
-    })
+      })
 
     // 2. Escuta mudanças em tempo real no estado da autenticação (Login, Logout, Token renovado)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        setUser(session.user)
-        await fetchPerfil(session.user.id)
-      } else {
+      try {
+        if (session) {
+          setUser(session.user)
+          await fetchPerfil(session.user.id)
+        } else {
+          setUser(null)
+          setPerfil(null)
+        }
+      } catch (err) {
+        console.error("Erro inesperado no listener de autenticação (onAuthStateChange):", err)
         setUser(null)
         setPerfil(null)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     })
 
     // Remove a escuta ao desmontar o componente
