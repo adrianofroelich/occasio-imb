@@ -39,6 +39,8 @@ interface Chamado {
   responsabilidade: string
   imagens_problema?: string[] | null
   imagens_solucao?: string[] | null
+  recebedor_nome?: string | null
+  recebedor_telefone?: string | null
 }
 
 // Configuração visual dos status para a timeline
@@ -81,8 +83,24 @@ export default function InquilinoDashboard() {
   const [categorias, setCategorias] = useState<{ id: string; nome: string; descricao: string | null }[]>([])
   const [descricao, setDescricao] = useState("")
   const [disponibilidade, setDisponibilidade] = useState("")
+  const [recebedorNome, setRecebedorNome] = useState("")
+  const [recebedorTelefone, setRecebedorTelefone] = useState("")
   const [imagens, setImagens] = useState<File[]>([])
   const [imagensPreview, setImagensPreview] = useState<string[]>([])
+
+  const aplicarMascaraTelefone = (value: string) => {
+    const limpo = value.replace(/\D/g, "")
+    if (limpo.length <= 10) {
+      return limpo
+        .replace(/(\d{2})(\d)/, "($1) $2")
+        .replace(/(\d{4})(\d)/, "$1-$2")
+    } else {
+      return limpo
+        .substring(0, 11)
+        .replace(/(\d{2})(\d)/, "($1) $2")
+        .replace(/(\d{5})(\d)/, "$1-$2")
+    }
+  }
   
   // Referência do input de arquivo
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -303,7 +321,9 @@ export default function InquilinoDashboard() {
           descricao_problema: descricao,
           categoria,
           disponibilidade_atendimento: disponibilidade,
-          status: "aberto"
+          status: "aberto",
+          recebedor_nome: recebedorNome.trim() || null,
+          recebedor_telefone: recebedorTelefone.trim() || null
         })
         .select()
         .single()
@@ -356,6 +376,8 @@ export default function InquilinoDashboard() {
       setCategoria("")
       setDescricao("")
       setDisponibilidade("")
+      setRecebedorNome("")
+      setRecebedorTelefone("")
       setImagens([])
       setImagensPreview([])
       if (fileInputRef.current) fileInputRef.current.value = ""
@@ -712,6 +734,29 @@ export default function InquilinoDashboard() {
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisponibilidade(e.target.value)}
                       required
                     />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Nome do Responsável no Local <span className="text-slate-400 font-normal">(Opcional - Fallback: Inquilino)</span>
+                      </label>
+                      <Input
+                        placeholder="Nome de quem receberá o técnico"
+                        value={recebedorNome}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRecebedorNome(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Telefone do Responsável <span className="text-slate-400 font-normal">(Opcional - Fallback: Inquilino)</span>
+                      </label>
+                      <Input
+                        placeholder="Ex: (99) 99999-9999"
+                        value={recebedorTelefone}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRecebedorTelefone(aplicarMascaraTelefone(e.target.value))}
+                      />
+                    </div>
                   </div>
 
                   <div>

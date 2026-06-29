@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Camera, Wrench, CheckCircle2, Loader2, RefreshCw, HelpCircle, Hammer, AlertCircle,
-  User, UserCheck, FileText, Coins, TrendingUp, Calendar, Plus, Printer, MapPin, X
+  User, UserCheck, FileText, Coins, TrendingUp, Calendar, Plus, Printer, MapPin, X, Phone
 } from "lucide-react"
 
 // Tipagens locais
@@ -44,7 +44,10 @@ interface Chamado {
   }
   inquilino: {
     nome: string
+    telefone?: string | null
   }
+  recebedor_nome?: string | null
+  recebedor_telefone?: string | null
   tecnico?: {
     id: string
     nome: string
@@ -318,6 +321,59 @@ export default function PrestadorDashboard() {
   // Verifica se é perfil de Técnico (pertence a uma Empresa Mãe) ou Empresa PJ (é conta-mãe)
   const ehTecnico = !!perfil?.empresa_mae_id
 
+  const renderContatosAtendimento = (c: Chamado) => {
+    const isDifferent = c.recebedor_nome && c.inquilino?.nome && c.recebedor_nome.trim().toLowerCase() !== c.inquilino.nome.trim().toLowerCase();
+    
+    return (
+      <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2 text-xs text-left mt-2">
+        <span className="block font-bold text-slate-800 text-[9px] uppercase tracking-wider mb-1">
+          Contatos para o Atendimento
+        </span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <span className="block text-[9px] font-bold text-slate-400 uppercase">Inquilino Titular</span>
+            <span className="block font-semibold text-slate-700">{c.inquilino?.nome || "Não informado"}</span>
+            {c.inquilino?.telefone && (
+              <span className="flex items-center gap-1 font-mono text-[10px] text-slate-500 mt-0.5">
+                <Phone className="h-3 w-3 shrink-0" /> {c.inquilino.telefone}
+              </span>
+            )}
+          </div>
+          <div>
+            <span className="block text-[9px] font-bold text-slate-400 uppercase">Responsável no Local</span>
+            {c.recebedor_nome ? (
+              <>
+                <span className={`inline-block font-semibold text-xs px-1.5 py-0.5 rounded ${isDifferent ? "text-purple-700 bg-purple-50 border border-purple-100 font-bold" : "text-slate-700 bg-slate-100"}`}>
+                  {c.recebedor_nome} {isDifferent && " (Outra Pessoa)"}
+                </span>
+                {c.recebedor_telefone ? (
+                  <span className="flex items-center gap-1 font-mono text-[10px] text-slate-500 mt-0.5">
+                    <Phone className="h-3 w-3 shrink-0" /> {c.recebedor_telefone}
+                  </span>
+                ) : (
+                  c.inquilino?.telefone && (
+                    <span className="flex items-center gap-1 font-mono text-[10px] text-slate-500 mt-0.5">
+                      <Phone className="h-3 w-3 shrink-0" /> {c.inquilino.telefone} <span className="text-[9px] text-slate-400 font-sans">(titular)</span>
+                    </span>
+                  )
+                )}
+              </>
+            ) : (
+              <>
+                <span className="block font-semibold text-slate-700">{c.inquilino?.nome || "Não informado"}</span>
+                {c.inquilino?.telefone && (
+                  <span className="flex items-center gap-1 font-mono text-[10px] text-slate-500 mt-0.5">
+                    <Phone className="h-3 w-3 shrink-0" /> {c.inquilino.telefone}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Carrega listagens do prestador/empresa
   const loadPrestadorData = async (silencioso = false) => {
     if (!silencioso) setLoading(true)
@@ -354,7 +410,7 @@ export default function PrestadorDashboard() {
           .select(`
             *,
             imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (nome)),
-            inquilino:inquilino_id (nome),
+            inquilino:inquilino_id (nome, telefone),
             chamados_midias:chamados_midias (*)
           `)
           .eq("tecnico_id", user?.id)
@@ -376,7 +432,7 @@ export default function PrestadorDashboard() {
           .select(`
             *,
             imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (nome)),
-            inquilino:inquilino_id (nome),
+            inquilino:inquilino_id (nome, telefone),
             orcamentos (
               id,
               valor_servico_r$,
@@ -405,7 +461,7 @@ export default function PrestadorDashboard() {
           .select(`
             *,
             imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (id, nome, tipo_repasse, prazo_repasse_dias)),
-            inquilino:inquilino_id (nome),
+            inquilino:inquilino_id (nome, telefone),
             orcamentos (
               id,
               valor_servico_r$,
@@ -453,7 +509,7 @@ export default function PrestadorDashboard() {
           .select(`
             *,
             imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (nome)),
-            inquilino:inquilino_id (nome),
+            inquilino:inquilino_id (nome, telefone),
             tecnico:tecnico_id (id, nome),
             orcamentos (
               id,
@@ -483,7 +539,7 @@ export default function PrestadorDashboard() {
           .select(`
             *,
             imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (nome)),
-            inquilino:inquilino_id (nome),
+            inquilino:inquilino_id (nome, telefone),
             tecnico:tecnico_id (id, nome),
             orcamentos (
               id,
@@ -523,7 +579,7 @@ export default function PrestadorDashboard() {
           .select(`
             *,
             imovel:imovel_id (codigo_imovel, endereco, bairro, imobiliaria:imobiliaria_id (id, nome, tipo_repasse, prazo_repasse_dias)),
-            inquilino:inquilino_id (nome),
+            inquilino:inquilino_id (nome, telefone),
             tecnico:tecnico_id (id, nome),
             orcamentos (
               id,
@@ -1855,9 +1911,7 @@ export default function PrestadorDashboard() {
                                 </div>
                               </div>
                               
-                              <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
-                                <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
-                              </div>
+                              {renderContatosAtendimento(chamado)}
 
                               {renderFotosChamado(chamado)}
 
@@ -2009,8 +2063,8 @@ export default function PrestadorDashboard() {
                                     </div>
                                   )}
 
-                                  <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
-                                    <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
+                                  {renderContatosAtendimento(chamado)}
+                                  <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1 mt-2">
                                     <div><strong>Categoria:</strong> <strong className="text-occasio-blue">{chamado.categoria}</strong></div>
                                     {chamado.tecnico && (
                                       <div className="pt-1 border-t border-slate-200 mt-1 flex items-center gap-1 text-slate-700">
@@ -2124,8 +2178,8 @@ export default function PrestadorDashboard() {
                                     </div>
                                   )}
 
-                                  <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
-                                    <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
+                                  {renderContatosAtendimento(chamado)}
+                                  <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1 mt-2">
                                     <div><strong>Categoria:</strong> <strong className="text-occasio-blue">{chamado.categoria}</strong></div>
                                     {chamado.tecnico && (
                                       <div className="pt-1 border-t border-slate-200 mt-1 flex items-center gap-1 text-slate-700">

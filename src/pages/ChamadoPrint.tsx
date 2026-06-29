@@ -35,6 +35,8 @@ interface PublicChamadoDetails {
     nome: string
     telefone: string | null
   }
+  recebedor_nome?: string | null
+  recebedor_telefone?: string | null
   imagens_problema: string[] | null
   imagens_solucao: string[] | null
   imobiliaria?: {
@@ -280,6 +282,19 @@ export default function ChamadoPrint() {
                 )}
               </div>
             </div>
+            {(chamado.recebedor_nome || chamado.recebedor_telefone) && (
+              <div className="pt-2 border-t border-slate-100 mt-2">
+                <span className="text-slate-500 block text-[10px] uppercase font-semibold tracking-wider">Responsável no Local</span>
+                <div className="flex justify-between items-center mt-0.5">
+                  <strong className={`text-slate-800 ${chamado.recebedor_nome && chamado.recebedor_nome.trim().toLowerCase() !== chamado.inquilino.nome.trim().toLowerCase() ? "text-purple-700 bg-purple-50 px-1 rounded font-bold border border-purple-100" : ""}`}>
+                    {chamado.recebedor_nome || chamado.inquilino.nome}
+                  </strong>
+                  <span className="text-slate-600 font-mono">
+                    {chamado.recebedor_telefone || chamado.inquilino.telefone}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

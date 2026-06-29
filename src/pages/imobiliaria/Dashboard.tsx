@@ -39,6 +39,8 @@ interface Chamado {
   inquilino_id: string
   empresa_prestadora_id?: string | null
   tecnico_id?: string | null
+  recebedor_nome?: string | null
+  recebedor_telefone?: string | null
   imovel: {
     codigo_imovel: string
     endereco: string
@@ -224,9 +226,25 @@ export default function Dashboard() {
   const [novoChamadoCategoria, setNovoChamadoCategoria] = useState("")
   const [novoChamadoDescricao, setNovoChamadoDescricao] = useState("")
   const [novoChamadoDisponibilidade, setNovoChamadoDisponibilidade] = useState("")
+  const [novoChamadoRecebedorNome, setNovoChamadoRecebedorNome] = useState("")
+  const [novoChamadoRecebedorTelefone, setNovoChamadoRecebedorTelefone] = useState("")
   const [novoChamadoImagens, setNovoChamadoImagens] = useState<File[]>([])
   const [novoChamadoImagensPreview, setNovoChamadoImagensPreview] = useState<string[]>([])
   const [salvandoNovoChamado, setSalvandoNovoChamado] = useState(false)
+
+  const aplicarMascaraTelefone = (value: string) => {
+    const limpo = value.replace(/\D/g, "")
+    if (limpo.length <= 10) {
+      return limpo
+        .replace(/(\d{2})(\d)/, "($1) $2")
+        .replace(/(\d{4})(\d)/, "$1-$2")
+    } else {
+      return limpo
+        .substring(0, 11)
+        .replace(/(\d{2})(\d)/, "($1) $2")
+        .replace(/(\d{5})(\d)/, "$1-$2")
+    }
+  }
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [categorias, setCategorias] = useState<{ id: string; nome: string; descricao: string | null }[]>([])
@@ -460,7 +478,9 @@ export default function Dashboard() {
           descricao_problema: novoChamadoDescricao.trim(),
           categoria: novoChamadoCategoria,
           disponibilidade_atendimento: novoChamadoDisponibilidade.trim() || "A combinar com a imobiliária",
-          status: "em_triagem"
+          status: "em_triagem",
+          recebedor_nome: novoChamadoRecebedorNome.trim() || null,
+          recebedor_telefone: novoChamadoRecebedorTelefone.trim() || null
         })
         .select()
         .single()
@@ -513,6 +533,8 @@ export default function Dashboard() {
       setNovoChamadoCategoria("")
       setNovoChamadoDescricao("")
       setNovoChamadoDisponibilidade("")
+      setNovoChamadoRecebedorNome("")
+      setNovoChamadoRecebedorTelefone("")
       setNovoChamadoImagens([])
       setNovoChamadoImagensPreview([])
       setFormChamadoAberto(false)
@@ -1415,6 +1437,26 @@ export default function Dashboard() {
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Nome do Responsável no Local <span className="text-[10px] text-slate-400 font-normal">(Opcional - Fallback: Inquilino)</span></label>
+                  <Input
+                    placeholder="Nome de quem receberá o técnico"
+                    value={novoChamadoRecebedorNome}
+                    onChange={(e) => setNovoChamadoRecebedorNome(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">Telefone do Responsável <span className="text-[10px] text-slate-400 font-normal">(Opcional - Fallback: Inquilino)</span></label>
+                  <Input
+                    placeholder="Ex: (99) 99999-9999"
+                    value={novoChamadoRecebedorTelefone}
+                    onChange={(e) => setNovoChamadoRecebedorTelefone(aplicarMascaraTelefone(e.target.value))}
+                  />
                 </div>
               </div>
 

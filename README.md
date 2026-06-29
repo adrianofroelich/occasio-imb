@@ -212,7 +212,19 @@ Anteriormente fixadas no código do frontend, as categorias de chamados (ex: Hid
 3. **Consumo Dinâmico:** Os formulários de abertura de chamados do Inquilino e da Imobiliária leem dinamicamente as opções da tabela `public.categorias`.
 4. **Mapeamento de Dados Síncrono:** Para manter compatibilidade de renderização de strings de categoria (ex: "Elétrica") no frontend, as listagens de todos os painéis e a RPC de impressão de O.S. resolvem dinamicamente os UUIDs das categorias em seus nomes equivalentes.
 
+## 📞 Contato de Recebimento no Imóvel
+
+Para otimizar a logística de atendimento técnico em campo, o sistema permite a coleta dos dados de contato específicos do responsável que receberá o técnico no imóvel.
+
+### Regras de Negócio:
+1. **Coleta Opcional na Abertura:** Tanto na abertura de chamado pelo Inquilino quanto administrativamente pela Imobiliária, são fornecidos os campos opcionais de "Nome do Responsável no Local" e "Telefone do Responsável" (com máscara padrão de telefone brasileiro).
+2. **Fallback Automático:** Caso esses campos fiquem vazios, o sistema utiliza automaticamente os dados do próprio Inquilino titular como contato para a visita.
+3. **Visibilidade em Destaque:** Nos painéis da Prestadora PJ (Gestor) e no PWA do Técnico PF, as informações de contato do recebedor e do inquilino titular são exibidas de forma clara em um bloco chamado **"Contatos para o Atendimento"**. Se a pessoa responsável no local for diferente do inquilino titular, ela é destacada visualmente com um badge colorido.
+4. **Exportação e Impressão:** Os dados do responsável no local também são expostos na RPC segura de consulta anônima e são exibidos adequadamente no layout de impressão (`ChamadoPrint.tsx`).
+
 ---
+
+
 
 ## 💻 Desenvolvimento Local
 

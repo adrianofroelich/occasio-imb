@@ -27,6 +27,8 @@ interface Chamado {
   criado_em: string
   imovel_id: string
   inquilino_id: string
+  recebedor_nome?: string | null
+  recebedor_telefone?: string | null
   imovel: {
     codigo_imovel: string
     endereco: string
@@ -34,6 +36,7 @@ interface Chamado {
   }
   inquilino: {
     nome: string
+    telefone?: string | null
   }
   orcamentos: {
     id: string
