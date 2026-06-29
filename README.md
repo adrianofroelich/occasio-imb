@@ -202,6 +202,16 @@ A partir da versão 1.5.0, o Occasio.Imob conta com suporte a anexo de evidênci
 5. **Exibição Dinâmica e Lightbox:** Nos painéis da Imobiliária e da Prestadora PJ, as evidências são exibidas como uma galeria elegante de miniaturas clicáveis que abrem em um visualizador (lightbox/modal) com zoom.
 6. **Impressão e PDF de Prestação de Contas:** As fotos de "Antes" e "Depois" são injetadas perfeitamente no rodapé das telas de impressão (`ChamadoPrint.tsx` e no modal/PDF de `LaudoTecnico.tsx`), prontas para exportação em PDF.
 
+## 🏷️ Dinamicidade de Categorias de Chamados
+
+Anteriormente fixadas no código do frontend, as categorias de chamados (ex: Hidráulica, Elétrica) agora são dinâmicas e gerenciadas exclusivamente pelo Super Admin (Dono do SaaS) no Painel Administrativo.
+
+### Funcionamento e Regras de Negócio:
+1. **Controle Total (CRUD):** O Super Admin pode criar novas categorias, atualizar o nome e a descrição, e excluir categorias existentes.
+2. **Exclusão Segura (`ON DELETE RESTRICT`):** Para evitar quebras de consistência dos dados históricos, o banco de dados impede a remoção de uma categoria se ela estiver vinculada a qualquer chamado (O.S.). O painel administrativo exibe um alerta amigável de erro operacional caso o administrador tente fazer isso.
+3. **Consumo Dinâmico:** Os formulários de abertura de chamados do Inquilino e da Imobiliária leem dinamicamente as opções da tabela `public.categorias`.
+4. **Mapeamento de Dados Síncrono:** Para manter compatibilidade de renderização de strings de categoria (ex: "Elétrica") no frontend, as listagens de todos os painéis e a RPC de impressão de O.S. resolvem dinamicamente os UUIDs das categorias em seus nomes equivalentes.
+
 ---
 
 ## 💻 Desenvolvimento Local

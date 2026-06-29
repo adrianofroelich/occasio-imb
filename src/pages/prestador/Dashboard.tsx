@@ -322,6 +322,18 @@ export default function PrestadorDashboard() {
     setErro(null)
 
     try {
+      // 0. Busca as categorias de chamados para mapeamento dinâmico
+      const { data: categoriasData, error: categoriasError } = await supabase
+        .from("categorias")
+        .select("*")
+      if (categoriasError) throw categoriasError
+      const cats = categoriasData || []
+
+      const mapCategoria = (c: any) => ({
+        ...c,
+        categoria: cats.find((cat: any) => cat.id === c.categoria)?.nome || c.categoria
+      })
+
       if (ehTecnico) {
         // ================= FLUXO TÉCNICO VINCULADO =================
         // 1. Busca chamados delegados ao técnico específico em status 'aguardando_orcamento'
@@ -351,7 +363,7 @@ export default function PrestadorDashboard() {
 
         const { data: pendentesData, error: pendentesError } = await queryPendentes
         if (pendentesError) throw pendentesError
-        setChamadosPendentes(pendentesData as unknown as Chamado[] || [])
+        setChamadosPendentes(((pendentesData || []) as any[]).map(mapCategoria) as unknown as Chamado[])
 
         // 2. Busca OS Ativas delegadas ao técnico ('os_liberada' ou 'em_execucao')
         // 2. Busca OS Ativas delegadas ao técnico ('os_liberada' ou 'em_execucao')
@@ -381,7 +393,7 @@ export default function PrestadorDashboard() {
           .order("criado_em", { ascending: false })
 
         if (osError) throw osError
-        setOsAtivas(osData as unknown as Chamado[] || [])
+        setOsAtivas(((osData || []) as any[]).map(mapCategoria) as unknown as Chamado[])
 
         // 3. Busca dados para o painel financeiro (Técnico PF)
         const { data: finData, error: finError } = await supabase
@@ -413,7 +425,7 @@ export default function PrestadorDashboard() {
         const chamadosComOrcamento = (finData || []).filter((c: any) => 
           c.orcamentos && c.orcamentos.some((o: any) => o.homologado_pela_empresa)
         )
-        setFinanceiroChamados(chamadosComOrcamento as unknown as Chamado[])
+        setFinanceiroChamados(((chamadosComOrcamento || []) as any[]).map(mapCategoria) as unknown as Chamado[])
 
         // 4. Busca os dados da Empresa Mãe
         if (perfil?.empresa_mae_id) {
@@ -459,7 +471,7 @@ export default function PrestadorDashboard() {
           .order("criado_em", { ascending: false })
 
         if (pendentesError) throw pendentesError
-        setChamadosPendentes(pendentesData as unknown as Chamado[] || [])
+        setChamadosPendentes(((pendentesData || []) as any[]).map(mapCategoria) as unknown as Chamado[])
 
         // 2. Busca todas as OS ativas de toda a sua equipe técnica
         const { data: osData, error: osError } = await supabase
@@ -489,7 +501,7 @@ export default function PrestadorDashboard() {
           .order("criado_em", { ascending: false })
 
         if (osError) throw osError
-        setOsAtivas(osData as unknown as Chamado[] || [])
+        setOsAtivas(((osData || []) as any[]).map(mapCategoria) as unknown as Chamado[])
 
         // 3. Busca lista de técnicos vinculados à empresa
         const { data: tecData, error: tecError } = await supabase
@@ -531,13 +543,13 @@ export default function PrestadorDashboard() {
         const chamadosComOrcamento = (finData || []).filter((c: any) => 
           c.orcamentos && c.orcamentos.some((o: any) => o.homologado_pela_empresa)
         )
-        setFinanceiroChamados(chamadosComOrcamento as unknown as Chamado[])
+        setFinanceiroChamados(((chamadosComOrcamento || []) as any[]).map(mapCategoria) as unknown as Chamado[])
 
         // Filtra concluídos (servico_concluido ou encerrado) para Empresa PJ
         const concluidos = (finData || []).filter((c: any) => 
           c.status === 'servico_concluido' || c.status === 'encerrado'
         )
-        setOsConcluidas(concluidos as unknown as Chamado[])
+        setOsConcluidas(((concluidos || []) as any[]).map(mapCategoria) as unknown as Chamado[])
       }
 
     } catch (err: any) {

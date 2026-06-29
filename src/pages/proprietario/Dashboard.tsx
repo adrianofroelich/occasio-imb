@@ -100,6 +100,18 @@ export default function ProprietarioDashboard() {
     setErro(null)
 
     try {
+      // 0. Busca as categorias de chamados para mapeamento dinâmico
+      const { data: categoriasData, error: categoriasError } = await supabase
+        .from("categorias")
+        .select("*")
+      if (categoriasError) throw categoriasError
+      const cats = categoriasData || []
+
+      const mapCategoria = (c: any) => ({
+        ...c,
+        categoria: cats.find((cat: any) => cat.id === c.categoria)?.nome || c.categoria
+      })
+
       // 1. Primeiro descobre os imóveis deste proprietário
       const { data: meusImoveis, error: imoveisError } = await supabase
         .from("imoveis")
@@ -142,7 +154,7 @@ export default function ProprietarioDashboard() {
         .order("criado_em", { ascending: false })
 
       if (avalError) throw avalError
-      setChamadosAval((avalData as unknown) as Chamado[] || [])
+      setChamadosAval(((avalData || []) as any[]).map(mapCategoria) as unknown as Chamado[])
 
       // 3. Busca histórico de chamados (resolvidos ou reprovados)
       const { data: historicoData, error: historicoError } = await supabase
@@ -168,7 +180,7 @@ export default function ProprietarioDashboard() {
         .order("criado_em", { ascending: false })
 
       if (historicoError) throw historicoError
-      setChamadosHistorico((historicoData as unknown) as Chamado[] || [])
+      setChamadosHistorico(((historicoData || []) as any[]).map(mapCategoria) as unknown as Chamado[])
 
     } catch (err: any) {
       console.error(err)

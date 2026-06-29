@@ -34,6 +34,13 @@ interface PerfilUsuario {
   logo_url?: string | null
 }
 
+interface Categoria {
+  id: string
+  nome: string
+  descricao: string | null
+  criado_em: string
+}
+
 interface Vinculo {
   id: string
   imobiliaria_id: string
@@ -74,7 +81,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
 
   // Controle de abas
-  const [activeTab, setActiveTab] = useState<"imobiliarias" | "prestadoras" | "vinculos">("imobiliarias")
+  const [activeTab, setActiveTab] = useState<"imobiliarias" | "prestadoras" | "vinculos" | "categorias">("imobiliarias")
 
   // Listagens
   const [imobiliarias, setImobiliarias] = useState<PerfilUsuario[]>([])
@@ -137,6 +144,14 @@ export default function AdminDashboard() {
   const [erro, setErro] = useState<string | null>(null)
   const [sucesso, setSucesso] = useState<string | null>(null)
 
+  // Estados para Categorias
+  const [categorias, setCategorias] = useState<Categoria[]>([])
+  const [catNome, setCatNome] = useState("")
+  const [catDescricao, setCatDescricao] = useState("")
+  const [categoriaEditando, setCategoriaEditando] = useState<Categoria | null>(null)
+  const [categoriaExcluindo, setCategoriaExcluindo] = useState<Categoria | null>(null)
+  const [salvandoCategoria, setSalvandoCategoria] = useState(false)
+
   // Segurança: bloquear se não for super admin
   useEffect(() => {
     if (!loadingData && authPerfil?.perfil !== "super_admin") {
@@ -182,6 +197,14 @@ export default function AdminDashboard() {
         .order("criado_em", { ascending: false })
       if (vincError) throw vincError
       setVinculos(vincData as unknown as Vinculo[] || [])
+
+      // 4. Busca categorias
+      const { data: catData, error: catError } = await supabase
+        .from("categorias")
+        .select("*")
+        .order("nome")
+      if (catError) throw catError
+      setCategorias(catData as Categoria[] || [])
 
     } catch (err: any) {
       console.error(err)
@@ -594,6 +617,114 @@ export default function AdminDashboard() {
     }
   }
 
+  // Criar Categoria
+  const handleCriarCategoria = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!catNome.trim()) {
+      setErro("O nome da categoria é obrigatório.")
+      return
+    }
+    setSalvandoCategoria(true)
+    setErro(null)
+    setSucesso(null)
+
+    try {
+      const { error } = await supabase
+        .from("categorias")
+        .insert({
+          nome: catNome.trim(),
+          descricao: catDescricao.trim() || null
+        })
+
+      if (error) throw error
+
+      setSucesso("Categoria criada com sucesso!")
+      setCatNome("")
+      setCatDescricao("")
+      await carregarDados(true)
+    } catch (err: any) {
+      console.error(err)
+      if (err.code === "23505") {
+        setErro("Já existe uma categoria com este nome.")
+      } else {
+        setErro(err.message || "Erro ao criar categoria.")
+      }
+    } finally {
+      setSalvandoCategoria(false)
+    }
+  }
+
+  // Editar Categoria
+  const handleEditarCategoria = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!categoriaEditando) return
+    if (!catNome.trim()) {
+      setErro("O nome da categoria é obrigatório.")
+      return
+    }
+    setSalvandoCategoria(true)
+    setErro(null)
+    setSucesso(null)
+
+    try {
+      const { error } = await supabase
+        .from("categorias")
+        .update({
+          nome: catNome.trim(),
+          descricao: catDescricao.trim() || null
+        })
+        .eq("id", categoriaEditando.id)
+
+      if (error) throw error
+
+      setSucesso("Categoria atualizada com sucesso!")
+      setCategoriaEditando(null)
+      setCatNome("")
+      setCatDescricao("")
+      await carregarDados(true)
+    } catch (err: any) {
+      console.error(err)
+      if (err.code === "23505") {
+        setErro("Já existe uma categoria com este nome.")
+      } else {
+        setErro(err.message || "Erro ao atualizar categoria.")
+      }
+    } finally {
+      setSalvandoCategoria(false)
+    }
+  }
+
+  // Excluir Categoria
+  const handleExcluirCategoria = async () => {
+    if (!categoriaExcluindo) return
+    setSalvandoCategoria(true)
+    setErro(null)
+    setSucesso(null)
+
+    try {
+      const { error } = await supabase
+        .from("categorias")
+        .delete()
+        .eq("id", categoriaExcluindo.id)
+
+      if (error) throw error
+
+      setSucesso("Categoria excluída com sucesso!")
+      setCategoriaExcluindo(null)
+      await carregarDados(true)
+    } catch (err: any) {
+      console.error(err)
+      if (err.code === "23503") {
+        setErro("Esta categoria não pode ser excluída pois existem chamados (OS) vinculados a ela.")
+      } else {
+        setErro(err.message || "Erro ao excluir categoria.")
+      }
+    } finally {
+      setSalvandoCategoria(false)
+      setCategoriaExcluindo(null)
+    }
+  }
+
   if (loadingData) {
     return (
       <div className="flex flex-col items-center justify-center py-32 text-slate-500 gap-2">
@@ -675,6 +806,17 @@ export default function AdminDashboard() {
         >
           <Link2 className="h-4 w-4 inline mr-1.5 -mt-0.5" />
           Vínculos Comerciais ({vinculos.length})
+        </button>
+        <button
+          onClick={() => { setActiveTab("categorias"); setErro(null); setSucesso(null) }}
+          className={`pb-3 text-sm font-bold border-b-2 px-4 transition-all ${
+            activeTab === "categorias"
+              ? "border-occasio-blue text-occasio-blue"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Shield className="h-4 w-4 inline mr-1.5 -mt-0.5" />
+          Gerenciar Categorias ({categorias.length})
         </button>
       </div>
 
@@ -1021,6 +1163,51 @@ export default function AdminDashboard() {
             </Card>
           )}
 
+          {activeTab === "categorias" && (
+            <Card className="border-slate-200 shadow bg-white">
+              <CardHeader className="bg-slate-50 border-b border-slate-200/50 p-4">
+                <CardTitle className="text-sm font-bold text-occasio-navy flex items-center gap-1.5">
+                  <Shield className="h-4 w-4 text-occasio-blue" />
+                  Nova Categoria
+                </CardTitle>
+                <CardDescription className="text-xs">Cadastre categorias dinâmicas de chamados.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4">
+                <form onSubmit={handleCriarCategoria} className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Nome da Categoria *</label>
+                    <Input
+                      placeholder="Ex: Alvenaria, Hidráulica"
+                      value={catNome}
+                      onChange={(e) => setCatNome(e.target.value)}
+                      required
+                      disabled={salvandoCategoria}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Descrição</label>
+                    <textarea
+                      placeholder="Descreva o que esta categoria engloba..."
+                      value={catDescricao}
+                      onChange={(e) => setCatDescricao(e.target.value)}
+                      disabled={salvandoCategoria}
+                      className="w-full border border-slate-200 rounded-md p-3 text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue h-20 bg-white"
+                    />
+                  </div>
+
+                  <Button
+                    disabled={salvandoCategoria || !catNome.trim()}
+                    type="submit"
+                    className="w-full bg-occasio-blue hover:bg-occasio-navy text-white text-xs font-semibold h-9"
+                  >
+                    {salvandoCategoria ? "Salvando..." : <><Plus className="h-4 w-4 mr-1" /> Criar Categoria</>}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
+
         </div>
 
         {/* ======================== SEÇÃO 2: LISTAGEM DE DADOS (LADO DIREITO - 2 COLUNAS) ======================== */}
@@ -1217,6 +1404,58 @@ export default function AdminDashboard() {
                   </Card>
                 ))
               )}
+            </div>
+          )}
+
+          {activeTab === "categorias" && (
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-[11px] uppercase tracking-wider font-bold">
+                    <th className="py-3 px-4">Nome</th>
+                    <th className="py-3 px-4">Descrição</th>
+                    <th className="py-3 px-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {categorias.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="py-8 text-center text-slate-400">
+                        Nenhuma categoria cadastrada.
+                      </td>
+                    </tr>
+                  ) : (
+                    categorias.map((cat) => (
+                      <tr key={cat.id} className="hover:bg-slate-50/50">
+                        <td className="py-3 px-4 font-bold text-slate-800">{cat.nome}</td>
+                        <td className="py-3 px-4 text-slate-500 max-w-md truncate">{cat.descricao || "Sem descrição"}</td>
+                        <td className="py-3 px-4 text-right space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setCategoriaEditando(cat)
+                              setCatNome(cat.nome)
+                              setCatDescricao(cat.descricao || "")
+                            }}
+                            className="text-occasio-blue hover:text-occasio-navy hover:bg-slate-100 h-8 px-2"
+                          >
+                            Editar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setCategoriaExcluindo(cat)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 px-2"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
 
@@ -1590,6 +1829,131 @@ export default function AdminDashboard() {
                     </>
                   ) : (
                     "Confirmar Exclusão"
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal de Edição de Categoria */}
+      {categoriaEditando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <Card className="w-full max-w-md border-slate-200 shadow-xl bg-white animate-in zoom-in-95 duration-200">
+            <CardHeader className="bg-slate-50 border-b border-slate-200 p-4 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-extrabold text-occasio-navy flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-occasio-blue" /> Editar Categoria
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Atualize o nome e a descrição da categoria.
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 rounded-full text-slate-500 hover:text-slate-700 font-bold"
+                onClick={() => {
+                  setCategoriaEditando(null)
+                  setCatNome("")
+                  setCatDescricao("")
+                }}
+                disabled={salvandoCategoria}
+              >
+                &times;
+              </Button>
+            </CardHeader>
+            <CardContent className="p-4">
+              <form onSubmit={handleEditarCategoria} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Nome da Categoria *</label>
+                  <Input
+                    placeholder="Ex: Elétrica"
+                    value={catNome}
+                    onChange={(e) => setCatNome(e.target.value)}
+                    required
+                    disabled={salvandoCategoria}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Descrição</label>
+                  <textarea
+                    placeholder="Descreva o que esta categoria engloba..."
+                    value={catDescricao}
+                    onChange={(e) => setCatDescricao(e.target.value)}
+                    disabled={salvandoCategoria}
+                    className="w-full border border-slate-200 rounded-md p-3 text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue h-24 bg-white"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setCategoriaEditando(null)
+                      setCatNome("")
+                      setCatDescricao("")
+                    }}
+                    disabled={salvandoCategoria}
+                    className="w-1/2 border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs h-9"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    disabled={salvandoCategoria || !catNome.trim()}
+                    type="submit"
+                    className="w-1/2 bg-occasio-blue hover:bg-occasio-navy text-white font-semibold text-xs h-9"
+                  >
+                    {salvandoCategoria ? "Salvando..." : "Salvar Alterações"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal de Exclusão de Categoria */}
+      {categoriaExcluindo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <Card className="w-full max-w-sm border-red-200 shadow-2xl bg-white border animate-in zoom-in-95 duration-200">
+            <CardHeader className="bg-red-50 border-b border-red-100 p-4">
+              <CardTitle className="text-sm font-extrabold text-red-800 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-600" /> Excluir Categoria
+              </CardTitle>
+              <CardDescription className="text-xs text-red-700 font-semibold">
+                Esta ação removerá permanentemente a categoria.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              <p className="text-xs text-slate-600 font-medium">
+                Tem certeza que deseja excluir a categoria <strong>{categoriaExcluindo.nome}</strong>?
+              </p>
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCategoriaExcluindo(null)}
+                  disabled={salvandoCategoria}
+                  className="w-1/2 border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs h-9"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleExcluirCategoria}
+                  disabled={salvandoCategoria}
+                  className="w-1/2 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs h-9 flex items-center justify-center gap-1.5"
+                >
+                  {salvandoCategoria ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Excluindo...
+                    </>
+                  ) : (
+                    "Confirmar"
                   )}
                 </Button>
               </div>

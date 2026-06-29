@@ -78,6 +78,7 @@ export default function InquilinoDashboard() {
   // Campos do formulário
   const [titulo, setTitulo] = useState("")
   const [categoria, setCategoria] = useState("")
+  const [categorias, setCategorias] = useState<{ id: string; nome: string; descricao: string | null }[]>([])
   const [descricao, setDescricao] = useState("")
   const [disponibilidade, setDisponibilidade] = useState("")
   const [imagens, setImagens] = useState<File[]>([])
@@ -126,6 +127,15 @@ export default function InquilinoDashboard() {
     setErro(null)
 
     try {
+      // 0. Busca as categorias dinâmicas do banco de dados
+      const { data: categoriasData, error: categoriasError } = await supabase
+        .from("categorias")
+        .select("*")
+        .order("nome")
+      if (categoriasError) throw categoriasError
+      const cats = categoriasData || []
+      setCategorias(cats)
+
       // 1. Busca o imóvel onde este usuário é inquilino
       const { data: imovelData, error: imovelError } = await supabase
         .from("imoveis")
@@ -146,7 +156,10 @@ export default function InquilinoDashboard() {
 
         if (chamadosError) throw chamadosError
 
-        const listaChamados = chamadosData as Chamado[] || []
+        const listaChamados = (chamadosData || []).map(c => ({
+          ...c,
+          categoria: cats.find(cat => cat.id === c.categoria)?.nome || c.categoria
+        })) as Chamado[]
         
         // Identifica se há chamados ativos (qualquer status que não seja encerrado ou reprovado)
         const ativos = listaChamados.filter(c => c.status !== 'encerrado' && c.status !== 'reprovado')
@@ -667,12 +680,11 @@ export default function InquilinoDashboard() {
                       className="w-full border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
                     >
                       <option value="">Selecione a Categoria...</option>
-                      <option value="Hidráulica">Hidráulica (Vazamento, Cano quebrado)</option>
-                      <option value="Elétrica">Elétrica (Curto-circuito, Chuveiro, Tomadas)</option>
-                      <option value="Alvenaria">Alvenaria/Estrutura (Rachaduras, Infiltrações)</option>
-                      <option value="Pintura">Pintura e Acabamento</option>
-                      <option value="Serralheria">Serralheria e Portas/Janelas</option>
-                      <option value="Outros">Outros Reparos</option>
+                      {categorias.map(cat => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.nome} {cat.descricao ? `(${cat.descricao})` : ""}
+                        </option>
+                      ))}
                     </select>
                   </div>
 

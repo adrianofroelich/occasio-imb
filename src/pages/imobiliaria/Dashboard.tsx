@@ -229,6 +229,7 @@ export default function Dashboard() {
   const [salvandoNovoChamado, setSalvandoNovoChamado] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [categorias, setCategorias] = useState<{ id: string; nome: string; descricao: string | null }[]>([])
   
   // Estados de filtros
   const [filtroStatus, setFiltroStatus] = useState<string>("todos")
@@ -524,6 +525,15 @@ export default function Dashboard() {
     else setRealtimeLoading(true)
     
     try {
+      // 0. Busca as categorias de chamados para mapeamento dinâmico
+      const { data: categoriasData, error: categoriasError } = await supabase
+        .from("categorias")
+        .select("*")
+        .order("nome")
+      if (categoriasError) throw categoriasError
+      const cats = categoriasData || []
+      setCategorias(cats)
+
       let query = supabase
         .from("chamados")
         .select(`
@@ -580,7 +590,11 @@ export default function Dashboard() {
 
       const { data, error } = await query
       if (error) throw error
-      setChamados((data as unknown) as Chamado[] || [])
+      const mapped = ((data as unknown) as Chamado[] || []).map(c => ({
+        ...c,
+        categoria: cats.find(cat => cat.id === c.categoria)?.nome || c.categoria
+      }))
+      setChamados(mapped)
     } catch (err: any) {
       console.error(err)
       setErro(`Não foi possível carregar a lista de chamados: ${err.message || err.details || JSON.stringify(err)}`)
@@ -1331,11 +1345,9 @@ export default function Dashboard() {
                     required
                   >
                     <option value="">Selecione...</option>
-                    <option value="Elétrica">Elétrica</option>
-                    <option value="Hidráulica">Hidráulica</option>
-                    <option value="Pintura">Pintura</option>
-                    <option value="Reparos">Reparos e Alvenaria</option>
-                    <option value="Outros">Outros</option>
+                    {categorias.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.nome}</option>
+                    ))}
                   </select>
                 </div>
               </div>
