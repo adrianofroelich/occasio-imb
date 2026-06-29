@@ -1427,6 +1427,8 @@ export default function PrestadorDashboard() {
 
                         <p className="text-slate-500 line-clamp-2 leading-relaxed">{chamado.descricao_problema}</p>
                         
+                        {renderContatosAtendimento(chamado)}
+
                         {renderFotosChamado(chamado)}
                         
                         {((!ehTecnico && chamado.tecnico) || (!ehTecnico && jaEnviouProposta)) && (
@@ -1523,6 +1525,8 @@ export default function PrestadorDashboard() {
                     <strong>Descrição do Problema:</strong>
                     <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoCotando.descricao_problema}</p>
                     
+                    {renderContatosAtendimento(chamadoCotando)}
+
                     {renderFotosChamado(chamadoCotando)}
                     
                     <div className="mt-3 bg-amber-50 border border-amber-200 rounded-md p-3 text-amber-900">
@@ -1658,6 +1662,8 @@ export default function PrestadorDashboard() {
                       <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoDelegando.descricao_problema}</p>
                     </div>
 
+                    {renderContatosAtendimento(chamadoDelegando)}
+
                     {renderFotosChamado(chamadoDelegando)}
 
                     <div>
@@ -1727,6 +1733,8 @@ export default function PrestadorDashboard() {
                       <strong>Descrição do Problema:</strong>
                       <p className="mt-1 font-mono text-[11px] leading-relaxed bg-white border p-2 rounded">{chamadoHomologando.descricao_problema}</p>
                     </div>
+
+                    {renderContatosAtendimento(chamadoHomologando)}
 
                     {renderFotosChamado(chamadoHomologando)}
 
