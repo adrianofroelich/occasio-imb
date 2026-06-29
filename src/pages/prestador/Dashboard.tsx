@@ -211,6 +211,9 @@ export default function PrestadorDashboard() {
   // Lista de técnicos da equipe (Empresa PJ)
   const [tecnicosDisponiveis, setTecnicosDisponiveis] = useState<{ id: string; nome: string }[]>([])
   
+  // Categorias cadastradas para o filtro
+  const [categorias, setCategorias] = useState<{ id: string; nome: string; descricao: string | null }[]>([])
+  
   // Loading e alertas
   const [loading, setLoading] = useState(true)
   const [realtimeLoading, setRealtimeLoading] = useState(false)
@@ -328,6 +331,7 @@ export default function PrestadorDashboard() {
         .select("*")
       if (categoriasError) throw categoriasError
       const cats = categoriasData || []
+      setCategorias(cats)
 
       const mapCategoria = (c: any) => ({
         ...c,
@@ -1920,6 +1924,7 @@ export default function PrestadorDashboard() {
 
                                   <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
                                     <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
+                                    <div><strong>Categoria:</strong> <strong className="text-occasio-blue">{chamado.categoria}</strong></div>
                                     {chamado.tecnico && (
                                       <div className="pt-1 border-t border-slate-200 mt-1 flex items-center gap-1 text-slate-700">
                                         <User className="h-3 w-3 text-slate-400" />
@@ -2034,6 +2039,7 @@ export default function PrestadorDashboard() {
 
                                   <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
                                     <div><strong>Inquilino:</strong> {chamado.inquilino?.nome || "Não informado"}</div>
+                                    <div><strong>Categoria:</strong> <strong className="text-occasio-blue">{chamado.categoria}</strong></div>
                                     {chamado.tecnico && (
                                       <div className="pt-1 border-t border-slate-200 mt-1 flex items-center gap-1 text-slate-700">
                                         <User className="h-3 w-3 text-slate-400" />
@@ -2161,8 +2167,6 @@ export default function PrestadorDashboard() {
           return `${ano}-${mes}`
         }))).sort().reverse()
 
-        // Gera as opções de categorias dinamicamente
-        const categoriasDisponiveis = Array.from(new Set(osConcluidas.map(c => c.categoria))).filter(Boolean)
 
         // Formata mes/ano
         const formatarMesAno = (mesAnoStr: string) => {
@@ -2200,8 +2204,8 @@ export default function PrestadorDashboard() {
                   className="border border-slate-200 rounded px-2 py-1 bg-white text-xs focus:outline-none"
                 >
                   <option value="">Todas as categorias</option>
-                  {categoriasDisponiveis.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
+                  {categorias.map(cat => (
+                    <option key={cat.id} value={cat.nome}>{cat.nome}</option>
                   ))}
                 </select>
               </div>
@@ -2278,6 +2282,7 @@ export default function PrestadorDashboard() {
                       <div className="p-2.5 bg-slate-50 rounded border text-[11px] leading-relaxed text-slate-600 space-y-1">
                         <div><strong>Endereço:</strong> {chamado.imovel?.endereco || "Não disponível"} ({chamado.imovel?.bairro || ""})</div>
                         <div><strong>Técnico Responsável:</strong> <strong className="text-slate-800">{chamado.tecnico?.nome || "Não informado"}</strong></div>
+                        <div><strong>Categoria:</strong> <strong className="text-occasio-blue">{chamado.categoria}</strong></div>
                         {chamado.data_conclusao && (
                           <div><strong>Concluído em:</strong> {new Date(chamado.data_conclusao).toLocaleDateString('pt-BR')}</div>
                         )}
@@ -2523,6 +2528,7 @@ export default function PrestadorDashboard() {
 
                           <div className="text-[10px] text-slate-500 flex justify-between items-center bg-slate-50 p-2 rounded">
                             <span>Técnico Responsável: <strong>{chamado.tecnico?.nome || "Não atribuído"}</strong></span>
+                            <span>Categoria: <strong className="text-occasio-blue">{chamado.categoria}</strong></span>
                             <span>Prazo: <strong>{orc.prazo_execucao_dias} dias</strong></span>
                           </div>
 

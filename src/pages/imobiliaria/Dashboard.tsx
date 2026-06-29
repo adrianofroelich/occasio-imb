@@ -339,6 +339,14 @@ export default function Dashboard() {
         setEmpresasVinculadas(list)
       }
 
+      // 4. Carrega as categorias de chamados para o formulário
+      const { data: catData, error: catError } = await supabase
+        .from("categorias")
+        .select("*")
+        .order("nome")
+      if (catError) throw catError
+      setCategorias(catData || [])
+
     } catch (err) {
       console.error("Erro ao carregar dados do formulário de chamados:", err)
     }
@@ -1185,8 +1193,6 @@ export default function Dashboard() {
     return atendeStatus && atendeCategoria && atendePeriodo
   })
 
-  // Obtém categorias únicas para o filtro dropdown
-  const categoriasUnicas = Array.from(new Set(chamados.map(item => item.categoria)))
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -1513,8 +1519,8 @@ export default function Dashboard() {
                 className="border border-slate-200 rounded-md h-9 px-3 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-occasio-blue"
               >
                 <option value="todos">Todas as Categorias</option>
-                {categoriasUnicas.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                {categorias.map(cat => (
+                  <option key={cat.id} value={cat.nome}>{cat.nome}</option>
                 ))}
               </select>
             </div>
@@ -1612,6 +1618,9 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <h3 className="text-base font-extrabold text-occasio-navy mt-1.5">{chamado.titulo}</h3>
+                        <div className="text-[11px] text-slate-500 font-semibold mt-1">
+                          Categoria: <span className="text-occasio-blue">{chamado.categoria}</span>
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2 items-center">
                         <Badge className={`${statusInfo.bg} ${statusInfo.cor} border text-xs font-semibold px-2.5 py-0.5 rounded-full hover:bg-transparent`}>
@@ -1913,6 +1922,12 @@ export default function Dashboard() {
                       <div className="p-3 bg-slate-50 rounded border border-slate-200/50 space-y-1">
                         <div className="text-xs font-bold text-occasio-navy font-mono">ID: {chamadoAtivo.id.slice(0,8)}...</div>
                         <div className="text-sm font-extrabold text-slate-800 line-clamp-1 mt-0.5">{chamadoAtivo.titulo}</div>
+                        <div className="text-xs text-slate-400 mt-1 flex justify-between border-t border-slate-200/50 pt-1">
+                          <span>Categoria:</span>
+                          <strong className="text-occasio-blue font-bold">
+                            {chamadoAtivo.categoria}
+                          </strong>
+                        </div>
                         <div className="text-xs text-slate-400 mt-1 flex justify-between border-t border-slate-200/50 pt-1">
                           <span>Alçada Imóvel:</span>
                           <strong className="text-slate-600">

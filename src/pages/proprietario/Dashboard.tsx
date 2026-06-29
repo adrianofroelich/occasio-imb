@@ -476,6 +476,9 @@ export default function ProprietarioDashboard() {
                             Cód: {chamado.imovel.codigo_imovel}
                           </span>
                           <h3 className="text-sm font-bold text-slate-800 mt-1">{chamado.titulo}</h3>
+                          <div className="text-[10px] text-slate-500 font-semibold mt-1">
+                            Categoria: <span className="text-occasio-blue">{chamado.categoria}</span>
+                          </div>
                         </div>
                         <Badge className="bg-amber-50 border-amber-200 text-amber-700 border text-[10px] font-semibold px-2 py-0.5 rounded-full hover:bg-transparent">
                           Excede Alçada
@@ -531,6 +534,9 @@ export default function ProprietarioDashboard() {
                             Cód: {chamado.imovel.codigo_imovel}
                           </span>
                           <h3 className="text-sm font-bold text-slate-800 mt-1">{chamado.titulo}</h3>
+                          <div className="text-[10px] text-slate-500 font-semibold mt-1">
+                            Categoria: <span className="text-occasio-blue">{chamado.categoria}</span>
+                          </div>
                         </div>
                         <Badge className={`${statusInfo.bg} ${statusInfo.cor} border text-[10px] font-semibold px-2 py-0.5 rounded-full hover:bg-transparent`}>
                           {statusInfo.label}
@@ -599,6 +605,14 @@ export default function ProprietarioDashboard() {
                     <span className="text-slate-400 block text-[9px] mt-1.5">
                       Limite de Alçada Imobiliária: <strong>{chamadoAtivo.imovel.limite_alcada_r$.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
                     </span>
+                  </div>
+                </div>
+
+                {/* Categoria */}
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Categoria</label>
+                  <div className="bg-slate-50 p-2.5 rounded border border-slate-200/50 text-xs font-bold text-occasio-blue">
+                    {chamadoAtivo.categoria}
                   </div>
                 </div>
 
