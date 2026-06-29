@@ -23,6 +23,17 @@ O suporte a PWA está ativado via `vite-plugin-pwa`. Ele gera automaticamente:
 - Registro automático do Service Worker para cache local e suporte offline de assets estáticos (essencial para prestadores em áreas de campo sem sinal).
 - Ícones adaptáveis e maskables a partir da logo.
 
+### 🌟 Funcionalidades do Engajamento Mobile Premium:
+1. **Assistente de Instalação Inteligente**:
+   - **Android & Desktop**: Captura o evento nativo global `beforeinstallprompt` e o dispara quando o usuário clica em "Instalar Aplicativo".
+   - **iOS (Safari)**: Exibe um assistente visual dinâmico que ensina o passo a passo de como clicar em "Compartilhar" (ícone com seta para cima) e, em seguida, em "Adicionar à Tela de Início".
+   - **Ocultação Contextual**: O botão e o card de instalação ocultam-se automaticamente se o aplicativo já estiver rodando em modo standalone (instalado).
+2. **Notificações Push (Opt-in)**:
+   - Disponível nas dashboards/telas de perfil dos perfis de **Inquilino**, **Técnico (Prestador)** e **Proprietário**.
+   - Fluxo de Toggle: Solicita a permissão do usuário nativamente (`Notification.requestPermission()`). Se autorizado, assina no navegador através do `PushManager` do service worker e envia a inscrição em formato JSON para o banco. Se desativado, desinscreve e remove do banco.
+   - Suporte a chaves VAPID configuráveis via `.env.local` na variável `VITE_VAPID_PUBLIC_KEY` (com fallback local seguro).
+   - Dados persistidos nas novas colunas `permite_push` e `push_subscription` na tabela `public.perfis`.
+
 ---
 
 ## 🐳 Deploy no EasyPanel (Docker)

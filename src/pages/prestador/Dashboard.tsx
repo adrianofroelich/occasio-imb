@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { comprimirImagemChamado } from "@/lib/compressor"
+import PWANotificacoesCard from "@/components/PWANotificacoesCard"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -1216,6 +1217,11 @@ export default function PrestadorDashboard() {
           <AlertDescription className="font-semibold">{sucesso}</AlertDescription>
         </Alert>
       )}
+
+      {/* Card de Instalação PWA e Notificações Push */}
+      <div className="mb-6">
+        <PWANotificacoesCard />
+      </div>
 
       {/* Abas PWA */}
       <div className={`grid ${ehTecnico ? "grid-cols-3" : "grid-cols-4"} gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6`}>

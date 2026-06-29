@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import VisualizadorImagem from "@/components/VisualizadorImagem"
 import LaudoTecnico from "@/components/LaudoTecnico"
+import PWANotificacoesCard from "@/components/PWANotificacoesCard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -418,6 +419,11 @@ export default function ProprietarioDashboard() {
           <AlertDescription className="font-semibold">{sucesso}</AlertDescription>
         </Alert>
       )}
+
+      {/* Card de Instalação PWA e Notificações Push */}
+      <div className="mb-6">
+        <PWANotificacoesCard />
+      </div>
 
       {/* Abas PWA */}
       <div className="grid grid-cols-2 gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6">

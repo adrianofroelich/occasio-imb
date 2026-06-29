@@ -21,6 +21,8 @@ export interface Perfil {
   criado_em: string
   atualizado_em: string
   logo_url?: string | null
+  permite_push?: boolean
+  push_subscription?: any
 }
 
 // Interface que define o valor provido pelo contexto de autenticação

@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { comprimirImagemChamado } from "@/lib/compressor"
 import VisualizadorImagem from "@/components/VisualizadorImagem"
+import PWANotificacoesCard from "@/components/PWANotificacoesCard"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -438,6 +439,11 @@ export default function InquilinoDashboard() {
             <RefreshCw className="h-4 w-4 text-occasio-blue animate-spin" />
           )}
         </div>
+      </div>
+
+      {/* Card de Instalação PWA e Notificações Push */}
+      <div className="mb-6">
+        <PWANotificacoesCard />
       </div>
 
       {erro && (

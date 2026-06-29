@@ -311,6 +311,22 @@ function MainLayout() {
 
 // Componente Root com Router configurado
 export default function App() {
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault()
+      // Armazena o evento nativo globalmente para ser disparado pelo botão de instalação
+      ;(window as any).deferredPrompt = e
+      // Dispara um evento personalizado para notificar os componentes reativos
+      window.dispatchEvent(new CustomEvent("pwa-installable"))
+    }
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
+    }
+  }, [])
+
   return (
     <AuthProvider>
       <BrowserRouter>
