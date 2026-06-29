@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 
 // Chave VAPID pública padrão para homologação/fallback
-const DEFAULT_VAPID_PUBLIC_KEY = "BDrsEIWlTy1YTAZxpkN1f1C0EcuCjL15j8lxS3KaXzDE_BvlWIHEIGdmsP3hfiiG3ldbF89pWEc6foyFxSOe5es"
+const DEFAULT_VAPID_PUBLIC_KEY = "BM4u4_wQw5nSfiOwqrTUTQpMRRxTay8NJhNNZ1emvdKopRuzbuLfzxSUbpknlSyshh3c_OTbCoTb0pKpMFQHBYs"
 
 // Helper para converter a chave VAPID Base64URL para Uint8Array
 function urlBase64ToUint8Array(base64String: string): Uint8Array {

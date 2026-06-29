@@ -15,7 +15,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        maximumFileSizeToCacheInBytes: 5242880
+        maximumFileSizeToCacheInBytes: 5242880,
+        importScripts: ['/sw-push.js']
       },
       manifest: {
         name: 'Occasio Imob',
