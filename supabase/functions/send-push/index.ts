@@ -83,148 +83,172 @@ Deno.serve(async (req) => {
       }
     };
 
-    // Mapeamento lógico de quem notificar com base no status do histórico
-    switch (novo_status) {
-      case "aberto":
-        queueNotification(
-          imobiliariaId,
-          "Novo chamado aberto 🛠️",
-          `Imóvel ${codigoImovel}: chamado "${titulo}" aberto pelo inquilino.`,
-          "/imobiliaria"
-        );
-        break;
+    // 1. Detectar delegação de técnico baseando-se na observação
+    const isDelegacao = observacao && (observacao.includes("designado ao técnico") || observacao.includes("designada ao técnico"));
+    
+    // 2. Detectar devolução de OS pelo técnico
+    const isDevolucao = observacao && observacao.includes("devolvida pelo técnico");
 
-      case "em_triagem":
-        queueNotification(
-          inquilinoId,
-          "Chamado em triagem 🔍",
-          `Seu chamado "${titulo}" está sendo analisado pela imobiliária.`,
-          "/inquilino"
-        );
-        break;
-
-      case "aguardando_orcamento":
-        queueNotification(
-          prestadoraId,
-          "Novo chamado para orçamento 📝",
-          `Você recebeu uma solicitação de orçamento para o chamado "${titulo}" no imóvel ${codigoImovel}.`,
-          "/prestador"
-        );
-        break;
-
-      case "orcamento_recebido":
-        queueNotification(
-          imobiliariaId,
-          "Orçamento recebido 💰",
-          `O prestador enviou o orçamento para o chamado "${titulo}".`,
-          "/imobiliaria"
-        );
-        break;
-
-      case "analise_proprietario":
-        queueNotification(
-          proprietarioId,
-          "Orçamento para aprovação 📋",
-          `Há um orçamento aguardando sua aprovação para o chamado "${titulo}".`,
-          "/proprietario"
-        );
-        break;
-
-      case "aguardando_autorizacao":
-        queueNotification(
-          imobiliariaId,
-          "Orçamento aprovado pelo proprietário ✅",
-          `O proprietário aprovou o orçamento do chamado "${titulo}". Por favor, autorize a execução.`,
-          "/imobiliaria"
-        );
-        break;
-
-      case "os_liberada":
-        queueNotification(
-          prestadoraId,
-          "Ordem de Serviço liberada 🚀",
-          `A execução do chamado "${titulo}" foi autorizada. Pode iniciar o serviço.`,
-          "/prestador"
-        );
-        if (tecnicoId) {
+    if (isDelegacao && tecnicoId) {
+      const isExecucao = chamado.status === 'os_liberada' || chamado.status === 'em_execucao';
+      const title = isExecucao ? "Nova OS para execução 🛠️" : "Nova vistoria atribuída 📋";
+      const body = isExecucao 
+        ? `Você recebeu uma nova Ordem de Serviço para executar: "${titulo}".`
+        : `Você foi designado para realizar a vistoria/cotação do chamado "${titulo}".`;
+      
+      queueNotification(tecnicoId, title, body, "/prestador");
+    } 
+    else if (isDevolucao && prestadoraId) {
+      queueNotification(
+        prestadoraId,
+        "Ordem de Serviço devolvida ⚠️",
+        `O técnico devolveu o chamado "${titulo}". Verifique a justificativa.`,
+        "/prestador"
+      );
+    }
+    else {
+      // Mapeamento lógico de quem notificar com base no status do histórico
+      switch (novo_status) {
+        case "aberto":
           queueNotification(
-            tecnicoId,
-            "Ordem de Serviço atribuída 🛠️",
-            `Você tem uma nova O.S. autorizada para execução: "${titulo}".`,
+            imobiliariaId,
+            "Novo chamado aberto 🛠️",
+            `Imóvel ${codigoImovel}: chamado "${titulo}" aberto pelo inquilino.`,
+            "/imobiliaria"
+          );
+          break;
+
+        case "em_triagem":
+          queueNotification(
+            inquilinoId,
+            "Chamado em triagem 🔍",
+            `Seu chamado "${titulo}" está sendo analisado pela imobiliária.`,
+            "/inquilino"
+          );
+          break;
+
+        case "aguardando_orcamento":
+          queueNotification(
+            prestadoraId,
+            "Novo chamado para orçamento 📝",
+            `Você recebeu uma solicitação de orçamento para o chamado "${titulo}" no imóvel ${codigoImovel}.`,
             "/prestador"
           );
-        }
-        queueNotification(
-          inquilinoId,
-          "Serviço autorizado ✅",
-          `O serviço do chamado "${titulo}" foi autorizado e iniciará em breve.`,
-          "/inquilino"
-        );
-        break;
+          break;
 
-      case "em_execucao":
-        queueNotification(
-          inquilinoId,
-          "Serviço em andamento ⚡",
-          `O técnico iniciou a execução do serviço "${titulo}".`,
-          "/inquilino"
-        );
-        queueNotification(
-          imobiliariaId,
-          "Serviço em execução ⚙️",
-          `O prestador iniciou a execução da O.S. "${titulo}".`,
-          "/imobiliaria"
-        );
-        break;
+        case "orcamento_recebido":
+          queueNotification(
+            imobiliariaId,
+            "Orçamento recebido 💰",
+            `O prestador enviou o orçamento para o chamado "${titulo}".`,
+            "/imobiliaria"
+          );
+          break;
 
-      case "servico_concluido":
-        queueNotification(
-          imobiliariaId,
-          "Serviço concluído pelo prestador 🏁",
-          `O prestador concluiu a execução de "${titulo}". Avalie e homologue o chamado.`,
-          "/imobiliaria"
-        );
-        queueNotification(
-          inquilinoId,
-          "Serviço concluído 📦",
-          `A manutenção "${titulo}" foi sinalizada como concluída pelo técnico.`,
-          "/inquilino"
-        );
-        break;
+        case "analise_proprietario":
+          queueNotification(
+            proprietarioId,
+            "Orçamento para aprovação 📋",
+            `Há um orçamento aguardando sua aprovação para o chamado "${titulo}".`,
+            "/proprietario"
+          );
+          break;
 
-      case "encerrado":
-        queueNotification(
-          inquilinoId,
-          "Chamado encerrado 🎉",
-          `O chamado "${titulo}" foi finalizado e homologado pela imobiliária.`,
-          "/inquilino"
-        );
-        queueNotification(
-          proprietarioId,
-          "Manutenção finalizada 📁",
-          `A manutenção do chamado "${titulo}" foi concluída e encerrada.`,
-          "/proprietario"
-        );
-        break;
+        case "aguardando_autorizacao":
+          queueNotification(
+            imobiliariaId,
+            "Orçamento aprovado pelo proprietário ✅",
+            `O proprietário aprovou o orçamento do chamado "${titulo}". Por favor, autorize a execução.`,
+            "/imobiliaria"
+          );
+          break;
 
-      case "reprovado":
-        queueNotification(
-          prestadoraId,
-          "Orçamento reprovado ❌",
-          `O orçamento para o chamado "${titulo}" foi reprovado/recusado.`,
-          "/prestador"
-        );
-        queueNotification(
-          inquilinoId,
-          "Chamado reprovado/cancelado ❌",
-          `O chamado "${titulo}" foi reprovado ou cancelado pela imobiliária.`,
-          "/inquilino"
-        );
-        break;
+        case "os_liberada":
+          queueNotification(
+            prestadoraId,
+            "Ordem de Serviço liberada 🚀",
+            `A execução do chamado "${titulo}" foi autorizada. Pode iniciar o serviço.`,
+            "/prestador"
+          );
+          if (tecnicoId) {
+            queueNotification(
+              tecnicoId,
+              "Ordem de Serviço atribuída 🛠️",
+              `Você tem uma nova O.S. autorizada para execução: "${titulo}".`,
+              "/prestador"
+            );
+          }
+          queueNotification(
+            inquilinoId,
+            "Serviço autorizado ✅",
+            `O serviço do chamado "${titulo}" foi autorizado e iniciará em breve.`,
+            "/inquilino"
+          );
+          break;
 
-      default:
-        // Caso genérico se houver algum outro status
-        break;
+        case "em_execucao":
+          queueNotification(
+            inquilinoId,
+            "Serviço em andamento ⚡",
+            `O técnico iniciou a execução do serviço "${titulo}".`,
+            "/inquilino"
+          );
+          queueNotification(
+            imobiliariaId,
+            "Serviço em execução ⚙️",
+            `O prestador iniciou a execução da O.S. "${titulo}".`,
+            "/imobiliaria"
+          );
+          break;
+
+        case "servico_concluido":
+          queueNotification(
+            imobiliariaId,
+            "Serviço concluído pelo prestador 🏁",
+            `O prestador concluiu a execução de "${titulo}". Avalie e homologue o chamado.`,
+            "/imobiliaria"
+          );
+          queueNotification(
+            inquilinoId,
+            "Serviço concluído 📦",
+            `A manutenção "${titulo}" foi sinalizada como concluída pelo técnico.`,
+            "/inquilino"
+          );
+          break;
+
+        case "encerrado":
+          queueNotification(
+            inquilinoId,
+            "Chamado encerrado 🎉",
+            `O chamado "${titulo}" foi finalizado e homologado pela imobiliária.`,
+            "/inquilino"
+          );
+          queueNotification(
+            proprietarioId,
+            "Manutenção finalizada 📁",
+            `A manutenção do chamado "${titulo}" foi concluída e encerrada.`,
+            "/proprietario"
+          );
+          break;
+
+        case "reprovado":
+          queueNotification(
+            prestadoraId,
+            "Orçamento reprovado ❌",
+            `O orçamento para o chamado "${titulo}" foi reprovado/recusado.`,
+            "/prestador"
+          );
+          queueNotification(
+            inquilinoId,
+            "Chamado reprovado/cancelado ❌",
+            `O chamado "${titulo}" foi reprovado ou cancelado pela imobiliária.`,
+            "/inquilino"
+          );
+          break;
+
+        default:
+          break;
+      }
     }
 
     // Configura os detalhes do VAPID para assinatura das chaves de push
