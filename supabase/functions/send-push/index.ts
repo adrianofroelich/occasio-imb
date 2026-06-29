@@ -308,7 +308,13 @@ Deno.serve(async (req) => {
         console.log(`Notificação push enviada com sucesso para o usuário: ${notif.userId}`);
       } catch (pushError: any) {
         console.error(`Erro ao disparar push para o usuário ${notif.userId}:`, pushError);
-        results.push({ userId: notif.userId, status: "error", error: pushError.message });
+        results.push({ 
+          userId: notif.userId, 
+          status: "error", 
+          error: pushError.message,
+          statusCode: pushError.statusCode,
+          body: pushError.body
+        });
 
         // Tratamento de limpeza: remove inscrições inválidas ou expiradas (404/410)
         if (pushError.statusCode === 410 || pushError.statusCode === 404) {
@@ -321,7 +327,22 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ success: true, results }), {
+    const debug = {
+      isDelegacao,
+      isDevolucao,
+      tecnicoId,
+      prestadoraId,
+      novo_status,
+      observacao,
+      chamado: chamado ? {
+        titulo: chamado.titulo,
+        status: chamado.status,
+        tecnico_id: chamado.tecnico_id,
+        empresa_prestadora_id: chamado.empresa_prestadora_id
+      } : null
+    };
+
+    return new Response(JSON.stringify({ success: true, results, debug }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
