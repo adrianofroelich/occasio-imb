@@ -41,6 +41,11 @@ export default function PWANotificacoesCard() {
   const [hasPrompt, setHasPrompt] = useState<boolean>(false)
   const [showIOSTutorial, setShowIOSTutorial] = useState<boolean>(false)
 
+  // Determina se exibe o botão de instalação:
+  // - No iOS, sempre exibe (pois serve de tutorial/orientação e o navegador não dispara prompt).
+  // - No Android/Desktop, exibe se não for standalone (não instalado) e o prompt já foi capturado.
+  const showInstallButton = isIOS || (!isStandalone && hasPrompt)
+
   // Sincroniza o estado do switch com a informação atual no perfil do usuário
   useEffect(() => {
     if (perfil) {
@@ -282,15 +287,17 @@ export default function PWANotificacoesCard() {
             </label>
           </div>
 
-          {/* Seção 2: Instalação do PWA (somente visível se não estiver standalone e (for iOS ou tiver o prompt de instalação pronto)) */}
-          {!isStandalone && (isIOS || hasPrompt) && (
+          {/* Seção 2: Instalação do PWA */}
+          {showInstallButton && (
             <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="space-y-0.5">
                 <span className="text-xs font-bold text-slate-800 block">
                   Aplicativo na Tela Inicial
                 </span>
                 <p className="text-[10px] text-slate-400 leading-relaxed max-w-[280px]">
-                  Instale o PWA na tela inicial do seu celular para acesso rápido e visual limpo de aplicativo.
+                  {isIOS 
+                    ? "Veja como adicionar o aplicativo na tela inicial do seu iPhone ou iPad."
+                    : "Instale o PWA na tela inicial do seu celular para acesso rápido e visual limpo de aplicativo."}
                 </p>
               </div>
               <Button
@@ -298,7 +305,7 @@ export default function PWANotificacoesCard() {
                 onClick={handleInstallApp}
                 className="bg-occasio-blue hover:bg-occasio-navy text-white text-[11px] font-bold h-8 px-3 rounded shadow-sm flex items-center gap-1.5 self-start sm:self-auto"
               >
-                Instalar Aplicativo
+                {isIOS ? "Instruções de Instalação" : "Instalar Aplicativo"}
               </Button>
             </div>
           )}
