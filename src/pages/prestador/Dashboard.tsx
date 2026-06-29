@@ -1098,6 +1098,15 @@ export default function PrestadorDashboard() {
     }
   }
 
+  // Filtros locais baseados em filtroCategoria
+  const chamadosPendentesFiltrados = filtroCategoria
+    ? chamadosPendentes.filter(c => c.categoria === filtroCategoria)
+    : chamadosPendentes
+
+  const osAtivasFiltradas = filtroCategoria
+    ? osAtivas.filter(c => c.categoria === filtroCategoria)
+    : osAtivas
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-md md:max-w-xl bg-slate-50 min-h-screen pb-20">
       
@@ -1243,7 +1252,45 @@ export default function PrestadorDashboard() {
                   </p>
                 </div>
               ) : (
-                chamadosPendentes.map((chamado) => {
+                <>
+                  {!ehTecnico && (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center gap-3 text-xs mb-1">
+                      <div className="flex flex-col gap-1 min-w-[120px]">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Filtrar por Categoria</label>
+                        <select
+                          value={filtroCategoria}
+                          onChange={(e) => setFiltroCategoria(e.target.value)}
+                          className="border border-slate-200 rounded px-2 py-1 bg-white text-xs focus:outline-none"
+                        >
+                          <option value="">Todas as categorias</option>
+                          {categorias.map(cat => (
+                            <option key={cat.id} value={cat.nome}>{cat.nome}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {filtroCategoria && (
+                        <Button 
+                          onClick={() => setFiltroCategoria("")}
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 text-[11px] text-slate-500 hover:text-slate-700 mt-4"
+                        >
+                          Limpar Filtro
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  {chamadosPendentesFiltrados.length === 0 ? (
+                    <div className="text-center py-16 text-slate-400 bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center gap-3 w-full">
+                      <HelpCircle className="h-10 w-10 text-slate-300" />
+                      <div className="font-semibold text-slate-500">Nenhum chamado encontrado</div>
+                      <p className="max-w-xs mx-auto text-[11px] text-slate-400">
+                        Não encontramos chamados pendentes para a categoria selecionada.
+                      </p>
+                    </div>
+                  ) : (
+                    chamadosPendentesFiltrados.map((chamado) => {
                   const orcPendente = chamado.orcamentos?.find(o => !o.homologado_pela_empresa)
                   const jaEnviouProposta = !!orcPendente
 
@@ -1399,8 +1446,10 @@ export default function PrestadorDashboard() {
                         </div>
                       </CardContent>
                     </Card>
-                  )
-                })
+                      )
+                    })
+                  )}
+                </>
               )}
             </div>
           )}
@@ -1850,11 +1899,49 @@ export default function PrestadorDashboard() {
                   }
 
                   // Se for gestor/dono PJ, exibe em sub-seções estruturadas para rastreamento
-                  const osLiberadas = osAtivas.filter(c => c.status === 'os_liberada')
-                  const osEmExecucao = osAtivas.filter(c => c.status === 'em_execucao')
+                  const osLiberadas = osAtivasFiltradas.filter(c => c.status === 'os_liberada')
+                  const osEmExecucao = osAtivasFiltradas.filter(c => c.status === 'em_execucao')
 
                   return (
                     <div className="space-y-6">
+                      {!ehTecnico && (
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center gap-3 text-xs mb-2">
+                          <div className="flex flex-col gap-1 min-w-[120px]">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">Filtrar por Categoria</label>
+                            <select
+                              value={filtroCategoria}
+                              onChange={(e) => setFiltroCategoria(e.target.value)}
+                              className="border border-slate-200 rounded px-2 py-1 bg-white text-xs focus:outline-none"
+                            >
+                              <option value="">Todas as categorias</option>
+                              {categorias.map(cat => (
+                                <option key={cat.id} value={cat.nome}>{cat.nome}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {filtroCategoria && (
+                            <Button 
+                              onClick={() => setFiltroCategoria("")}
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-7 text-[11px] text-slate-500 hover:text-slate-700 mt-4"
+                            >
+                              Limpar Filtro
+                            </Button>
+                          )}
+                        </div>
+                      )}
+
+                      {osAtivasFiltradas.length === 0 ? (
+                        <div className="text-center py-16 text-slate-400 bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center gap-3">
+                          <Wrench className="h-10 w-10 text-slate-300" />
+                          <div className="font-semibold text-slate-500">Nenhuma OS encontrada</div>
+                          <p className="max-w-xs mx-auto text-[11px] text-slate-400">
+                            Não encontramos ordens de serviço ativas para a categoria selecionada.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
                       {/* 1. OS Designadas (Aguardando Início do Técnico) */}
                       {osLiberadas.length > 0 && (
                         <div className="space-y-3">
@@ -2058,6 +2145,8 @@ export default function PrestadorDashboard() {
                             ))}
                           </div>
                         </div>
+                      )}
+                        </>
                       )}
                     </div>
                   )
