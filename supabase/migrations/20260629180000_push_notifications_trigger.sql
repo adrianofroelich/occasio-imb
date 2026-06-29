@@ -1,6 +1,8 @@
 -- Migração: Cria gatilho para envio de notificações push via pg_net
 -- Criado em: 29/06/2026
 
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
 CREATE OR REPLACE FUNCTION public.trg_fn_notify_on_history_insert()
 RETURNS TRIGGER AS $$
 DECLARE
