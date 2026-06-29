@@ -73,8 +73,8 @@ const STATUS_CONFIG: Record<StatusChamado, { label: string; cor: string; bg: str
 export default function ProprietarioDashboard() {
   const { user, perfil } = useAuth()
   
-  // Abas do dashboard: aval (aguardando aprovação) ou historico (concluídos/arquivados)
-  const [activeTab, setActiveTab] = useState<"aval" | "historico">("aval")
+  // Abas do dashboard: aval (aguardando aprovação), historico (concluídos/arquivados) ou configuracoes
+  const [activeTab, setActiveTab] = useState<"aval" | "historico" | "configuracoes">("aval")
   
   // Listas de chamados
   const [chamadosAval, setChamadosAval] = useState<Chamado[]>([])
@@ -420,13 +420,8 @@ export default function ProprietarioDashboard() {
         </Alert>
       )}
 
-      {/* Card de Instalação PWA e Notificações Push */}
-      <div className="mb-6">
-        <PWANotificacoesCard />
-      </div>
-
       {/* Abas PWA */}
-      <div className="grid grid-cols-2 gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6">
+      <div className="grid grid-cols-3 gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6">
         <button
           onClick={() => { setActiveTab("aval"); setChamadoAtivo(null) }}
           className={`py-2 text-xs font-bold rounded-md transition-all ${
@@ -445,12 +440,27 @@ export default function ProprietarioDashboard() {
               : "text-slate-500 hover:text-slate-800"
           }`}
         >
-          Histórico de Manutenções ({chamadosHistorico.length})
+          Histórico ({chamadosHistorico.length})
+        </button>
+        <button
+          onClick={() => { setActiveTab("configuracoes"); setChamadoAtivo(null) }}
+          className={`py-2 text-xs font-bold rounded-md transition-all ${
+            activeTab === "configuracoes" 
+              ? "bg-white text-occasio-navy shadow-sm" 
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Configurações
         </button>
       </div>
 
-      {/* Layout Grid */}
-      <div className="grid lg:grid-cols-3 gap-8">
+      {activeTab === "configuracoes" ? (
+        <div className="max-w-md mx-auto">
+          <PWANotificacoesCard />
+        </div>
+      ) : (
+        /* Layout Grid */
+        <div className="grid lg:grid-cols-3 gap-8">
         
         {/* Lista de Chamados */}
         <div className="lg:col-span-2 space-y-4">
@@ -793,6 +803,7 @@ export default function ProprietarioDashboard() {
         </div>
 
       </div>
+      )}
 
       {/* Modal de Esclarecimentos */}
       {mostrarModalEsclarecimento && chamadoAtivo && (

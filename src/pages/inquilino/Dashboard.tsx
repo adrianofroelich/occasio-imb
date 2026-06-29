@@ -11,7 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { 
   Calendar, Camera, Wrench, CheckCircle2, 
-  AlertTriangle, Loader2, RefreshCw, Landmark, History, AlertCircle, Plus, X
+  AlertTriangle, Loader2, RefreshCw, Landmark, History, AlertCircle, Plus, X, Settings
 } from "lucide-react"
 
 // Tipagens locais
@@ -441,11 +441,6 @@ export default function InquilinoDashboard() {
         </div>
       </div>
 
-      {/* Card de Instalação PWA e Notificações Push */}
-      <div className="mb-6">
-        <PWANotificacoesCard />
-      </div>
-
       {erro && (
         <Alert variant="destructive" className="mb-6 bg-red-50 border-red-200 text-red-800">
           <AlertCircle className="h-5 w-5 text-red-600" />
@@ -470,46 +465,62 @@ export default function InquilinoDashboard() {
       ) : (
         <>
           {/* Abas de Chamados */}
-          {imovel && (
-            <div className="flex items-center gap-2 border-b border-slate-200 pb-px mb-6 overflow-x-auto no-scrollbar scroll-smooth">
-              <button
-                type="button"
-                onClick={() => setActiveTab("novo")}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all duration-200 ${
-                  activeTab === "novo"
-                    ? "border-occasio-blue text-occasio-blue font-extrabold"
-                    : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
-                }`}
-              >
-                <Plus className="h-4 w-4" />
-                Nova Solicitação
-              </button>
-              
-              {chamadosAtivos.map((chamado) => {
-                const isSelected = activeTab === chamado.id
-                return (
-                  <button
-                    type="button"
-                    key={chamado.id}
-                    onClick={() => setActiveTab(chamado.id)}
-                    className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all duration-200 ${
-                      isSelected
-                        ? "border-occasio-blue text-occasio-blue font-extrabold"
-                        : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
-                    }`}
-                  >
-                    <Wrench className="h-4 w-4" />
-                    <span className="max-w-[120px] truncate">{chamado.titulo}</span>
-                    <span className="text-[9px] bg-slate-100 text-slate-500 border border-slate-200 px-1 py-0.5 rounded font-mono font-bold uppercase">
-                      {chamado.status.replace("_", " ")}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-px mb-6 overflow-x-auto no-scrollbar scroll-smooth">
+            {imovel && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("novo")}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all duration-200 ${
+                    activeTab === "novo"
+                      ? "border-occasio-blue text-occasio-blue font-extrabold"
+                      : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                  }`}
+                >
+                  <Plus className="h-4 w-4" />
+                  Nova Solicitação
+                </button>
+                
+                {chamadosAtivos.map((chamado) => {
+                  const isSelected = activeTab === chamado.id
+                  return (
+                    <button
+                      type="button"
+                      key={chamado.id}
+                      onClick={() => setActiveTab(chamado.id)}
+                      className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all duration-200 ${
+                        isSelected
+                          ? "border-occasio-blue text-occasio-blue font-extrabold"
+                          : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                      }`}
+                    >
+                      <Wrench className="h-4 w-4" />
+                      <span className="max-w-[120px] truncate">{chamado.titulo}</span>
+                      <span className="text-[9px] bg-slate-100 text-slate-500 border border-slate-200 px-1 py-0.5 rounded font-mono font-bold uppercase">
+                        {chamado.status.replace("_", " ")}
+                      </span>
+                    </button>
+                  )
+                })}
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setActiveTab("configuracoes")}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all duration-200 ${
+                activeTab === "configuracoes"
+                  ? "border-occasio-blue text-occasio-blue font-extrabold"
+                  : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+              }`}
+            >
+              <Settings className="h-4 w-4" />
+              Configurações
+            </button>
+          </div>
 
-          {activeTab !== "novo" && chamadoAtivo ? (
+          {activeTab === "configuracoes" ? (
+            <PWANotificacoesCard />
+          ) : activeTab !== "novo" && chamadoAtivo ? (
             /* ======================== VISUALIZAÇÃO DE CHAMADO ATIVO ======================== */
             <div className="space-y-6">
               <Card className="border-slate-200 shadow-md bg-white">
@@ -835,7 +846,7 @@ export default function InquilinoDashboard() {
       )}
 
       {/* Histórico Simplificado de Chamados Resolvidos */}
-      {historico.length > 0 && (
+      {activeTab !== "configuracoes" && historico.length > 0 && (
         <div className="mt-8 space-y-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 pl-1">
             <History className="h-4 w-4" /> Histórico de Chamados

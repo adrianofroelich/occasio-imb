@@ -1218,13 +1218,8 @@ export default function PrestadorDashboard() {
         </Alert>
       )}
 
-      {/* Card de Instalação PWA e Notificações Push */}
-      <div className="mb-6">
-        <PWANotificacoesCard />
-      </div>
-
       {/* Abas PWA */}
-      <div className={`grid ${ehTecnico ? "grid-cols-3" : "grid-cols-4"} gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6`}>
+      <div className={`grid ${ehTecnico ? "grid-cols-4" : "grid-cols-5"} gap-2 bg-slate-200/60 p-1.5 rounded-lg mb-6`}>
         <button
           onClick={() => { 
             setActiveTab("orcamentos")
@@ -1291,6 +1286,22 @@ export default function PrestadorDashboard() {
         >
           Financeiro
         </button>
+        <button
+          onClick={() => { 
+            setActiveTab("configuracoes")
+            setChamadoCotando(null)
+            setChamadoConcluindo(null)
+            setChamadoDelegando(null)
+            setChamadoHomologando(null)
+          }}
+          className={`py-2 text-[11px] md:text-xs font-bold rounded-md transition-all ${
+            activeTab === "configuracoes" 
+              ? "bg-white text-occasio-navy shadow-sm" 
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Ajustes
+        </button>
       </div>
 
       {loading ? (
@@ -1300,6 +1311,11 @@ export default function PrestadorDashboard() {
         </div>
       ) : (
         <>
+          {/* ======================== ABA 5: CONFIGURAÇÕES / AJUSTES ======================== */}
+          {activeTab === "configuracoes" && (
+            <PWANotificacoesCard />
+          )}
+
           {/* ======================== ABA 1: ORÇAMENTOS PENDENTES ======================== */}
           {activeTab === "orcamentos" && !chamadoCotando && !chamadoDelegando && !chamadoHomologando && (
             <div className="space-y-4">
