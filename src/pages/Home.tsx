@@ -1,9 +1,49 @@
-import { CheckCircle2 } from "lucide-react"
+import { useEffect } from "react"
+import { useNavigate } from "react-router-dom"
+import { useAuth } from "@/hooks/useAuth"
+import { CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 
 export default function Home() {
+  const { user, perfil, loading } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!loading && user && perfil) {
+      switch (perfil.perfil) {
+        case "imobiliaria":
+          navigate("/imobiliaria/dashboard", { replace: true })
+          break
+        case "inquilino":
+          navigate("/inquilino/dashboard", { replace: true })
+          break
+        case "prestador":
+          navigate("/prestador/dashboard", { replace: true })
+          break
+        case "proprietario":
+          navigate("/proprietario/dashboard", { replace: true })
+          break
+        case "super_admin":
+          navigate("/admin/dashboard", { replace: true })
+          break
+      }
+    }
+  }, [user, perfil, loading, navigate])
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-white">
+        <Loader2 className="h-8 w-8 animate-spin text-occasio-blue" />
+      </div>
+    )
+  }
+
+  if (user && perfil) {
+    return null
+  }
+
   return (
     <>
       {/* Hero Section */}
